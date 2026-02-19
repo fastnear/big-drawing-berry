@@ -14,6 +14,8 @@ interface Props {
   onRedo: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  fillMode: boolean;
+  onSetFillMode: (fill: boolean) => void;
 }
 
 export default function Toolbar({
@@ -30,6 +32,8 @@ export default function Toolbar({
   onRedo,
   canUndo,
   canRedo,
+  fillMode,
+  onSetFillMode,
 }: Props) {
   // Don't show drawing controls if not signed in or on mobile
   const isMobile =
@@ -70,6 +74,17 @@ export default function Toolbar({
             style={styles.colorPicker}
             title="Pick a color"
           />
+
+          <button
+            style={{
+              ...styles.clearButton,
+              ...(fillMode ? styles.modeActive : {}),
+            }}
+            onClick={() => onSetFillMode(!fillMode)}
+            title="Fill mode (bucket)"
+          >
+            Fill
+          </button>
 
           <div style={styles.undoRedoSection}>
             <button

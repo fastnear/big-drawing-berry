@@ -10,6 +10,41 @@ type Stroke = Pixel[];
 /** One hour in milliseconds (for client-side ownership hint). */
 const OWNERSHIP_DURATION_MS = 3_600_000;
 
+/** Maximum pixels a single flood fill can produce. */
+const FILL_LIMIT = 10_000;
+
+/** Read the effective RGB hex (6 chars, uppercase) for a pixel coordinate.
+ *  Checks pending map first (last write wins), then falls back to region data.
+ *  Returns null if the pixel has no region data loaded. */
+function getPixelColor(
+  px: number,
+  py: number,
+  pendingMap: Map<string, string>,
+  regionData: Map<string, ArrayBuffer>
+): string | null {
+  const key = `${px},${py}`;
+  const pending = pendingMap.get(key);
+  if (pending) return pending;
+
+  const rx = Math.floor(px / REGION_SIZE);
+  const ry = Math.floor(py / REGION_SIZE);
+  const blob = regionData.get(`${rx}:${ry}`);
+  if (!blob) return null;
+
+  const lx = ((px % REGION_SIZE) + REGION_SIZE) % REGION_SIZE;
+  const ly = ((py % REGION_SIZE) + REGION_SIZE) % REGION_SIZE;
+  const offset = (ly * REGION_SIZE + lx) * PIXEL_SIZE;
+  const view = new Uint8Array(blob);
+  const r = view[offset];
+  const g = view[offset + 1];
+  const b = view[offset + 2];
+  return (
+    r.toString(16).padStart(2, "0") +
+    g.toString(16).padStart(2, "0") +
+    b.toString(16).padStart(2, "0")
+  ).toUpperCase();
+}
+
 /** Replay all strokes into a deduped pixel array (last write wins). */
 function derivePixels(strokes: Stroke[], currentStroke: Stroke): Pixel[] {
   const map = new Map<string, Pixel>();
@@ -31,6 +66,9 @@ export function useDrawing(
 ) {
   const [mode, setMode] = useState<Mode>("move");
   const [color, setColor] = useState("#FF5733");
+  const [fillMode, setFillMode] = useState(false);
+  const [fillError, setFillError] = useState<string | null>(null);
+  const fillErrorTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [pendingPixels, setPendingPixels] = useState<Pixel[]>([]);
   const [isSending, setIsSending] = useState(false);
   const isDrawingRef = useRef(false);
@@ -131,6 +169,68 @@ export function useDrawing(
     [mode, accountId, colorHex, regionDataRef, recomputePending]
   );
 
+  const fillAtPoint = useCallback(
+    (worldX: number, worldY: number) => {
+      if (mode !== "draw" || !accountId) return;
+      const regionData = regionDataRef.current;
+      if (!regionData) return;
+
+      const px = Math.floor(worldX);
+      const py = Math.floor(worldY);
+
+      // Build a pending pixel map (last write wins)
+      const pendingMap = new Map<string, string>();
+      for (const p of derivePixels(strokesRef.current, currentStrokeRef.current)) {
+        pendingMap.set(`${p.x},${p.y}`, p.color);
+      }
+
+      const targetColor = getPixelColor(px, py, pendingMap, regionData);
+      if (targetColor === null) return;
+      if (targetColor === colorHex) return;
+
+      const filled: Pixel[] = [];
+      const visited = new Set<string>();
+      const queue: Array<[number, number]> = [[px, py]];
+      visited.add(`${px},${py}`);
+
+      while (queue.length > 0 && filled.length < FILL_LIMIT) {
+        const [cx, cy] = queue.shift()!;
+        filled.push({ x: cx, y: cy, color: colorHex });
+
+        for (const [nx, ny] of [
+          [cx - 1, cy],
+          [cx + 1, cy],
+          [cx, cy - 1],
+          [cx, cy + 1],
+        ] as const) {
+          const nk = `${nx},${ny}`;
+          if (visited.has(nk)) continue;
+          visited.add(nk);
+          const nc = getPixelColor(nx, ny, pendingMap, regionData);
+          if (nc === targetColor) {
+            queue.push([nx, ny]);
+          }
+        }
+      }
+
+      // If BFS didn't finish (hit the limit), discard — area too large
+      if (queue.length > 0) {
+        clearTimeout(fillErrorTimer.current);
+        setFillError(`Area too large to fill (>${FILL_LIMIT.toLocaleString()} pixels)`);
+        fillErrorTimer.current = setTimeout(() => setFillError(null), 3000);
+        setFillMode(false);
+        return;
+      }
+      if (filled.length === 0) return;
+
+      strokesRef.current = [...strokesRef.current, filled];
+      redoStackRef.current = [];
+      recomputePending();
+      setFillMode(false);
+    },
+    [mode, accountId, colorHex, regionDataRef, recomputePending]
+  );
+
   const undo = useCallback(() => {
     if (strokesRef.current.length === 0) return;
     const last = strokesRef.current[strokesRef.current.length - 1];
@@ -196,11 +296,15 @@ export function useDrawing(
     setMode,
     color,
     setColor,
+    fillMode,
+    setFillMode,
+    fillError,
     pendingPixels,
     isSending,
     startDrawing,
     stopDrawing,
     addPixel,
+    fillAtPoint,
     submitPixels,
     clearPending,
     handleDrawEvent,

@@ -23,6 +23,8 @@ interface Props {
   onAddPixel: (worldX: number, worldY: number) => void;
   onPickColor: (color: string) => void;
   onCanvasSize: (w: number, h: number) => void;
+  fillMode: boolean;
+  onFillAtPoint: (worldX: number, worldY: number) => void;
 }
 
 export default function Board({
@@ -38,6 +40,8 @@ export default function Board({
   onAddPixel,
   onPickColor,
   onCanvasSize,
+  fillMode,
+  onFillAtPoint,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isPanningRef = useRef(false);
@@ -171,12 +175,17 @@ export default function Board({
         isPanningRef.current = true;
         lastMouseRef.current = { x: e.clientX, y: e.clientY };
       } else if (mode === "draw" && e.button === 0) {
-        onStartDrawing();
-        const { x, y } = screenToWorld(e.clientX, e.clientY);
-        onAddPixel(x, y);
+        if (fillMode) {
+          const { x, y } = screenToWorld(e.clientX, e.clientY);
+          onFillAtPoint(x, y);
+        } else {
+          onStartDrawing();
+          const { x, y } = screenToWorld(e.clientX, e.clientY);
+          onAddPixel(x, y);
+        }
       }
     },
-    [mode, screenToWorld, onStartDrawing, onAddPixel, pickColorAt]
+    [mode, fillMode, screenToWorld, onStartDrawing, onAddPixel, onFillAtPoint, pickColorAt]
   );
 
   const handleMouseMove = useCallback(
@@ -186,12 +195,12 @@ export default function Board({
         const dy = -(e.clientY - lastMouseRef.current.y) / camera.zoom;
         lastMouseRef.current = { x: e.clientX, y: e.clientY };
         onPan(dx, dy);
-      } else if (mode === "draw") {
+      } else if (mode === "draw" && !fillMode) {
         const { x, y } = screenToWorld(e.clientX, e.clientY);
         onAddPixel(x, y);
       }
     },
-    [camera.zoom, mode, screenToWorld, onPan, onAddPixel]
+    [camera.zoom, mode, fillMode, screenToWorld, onPan, onAddPixel]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -289,7 +298,7 @@ export default function Board({
         position: "absolute",
         top: 0,
         left: 0,
-        cursor: altHeld ? "copy" : mode === "move" ? "grab" : "crosshair",
+        cursor: altHeld ? "copy" : mode === "move" ? "grab" : fillMode ? "cell" : "crosshair",
         touchAction: "none",
       }}
       onMouseDown={handleMouseDown}

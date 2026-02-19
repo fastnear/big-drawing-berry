@@ -28,11 +28,15 @@ export default function App() {
     setMode,
     color,
     setColor,
+    fillMode,
+    setFillMode,
+    fillError,
     pendingPixels,
     isSending,
     startDrawing,
     stopDrawing,
     addPixel,
+    fillAtPoint,
     submitPixels,
     clearPending,
     handleDrawEvent,
@@ -66,6 +70,8 @@ export default function App() {
         onAddPixel={addPixel}
         onPickColor={setColor}
         onCanvasSize={handleCanvasSize}
+        fillMode={fillMode}
+        onFillAtPoint={fillAtPoint}
       />
 
       <WalletButton
@@ -89,6 +95,8 @@ export default function App() {
         onRedo={redo}
         canUndo={canUndo}
         canRedo={canRedo}
+        fillMode={fillMode}
+        onSetFillMode={setFillMode}
       />
 
       <Minimap
@@ -99,6 +107,26 @@ export default function App() {
       />
 
       <ZoomControls onZoomIn={zoomIn} onZoomOut={zoomOut} />
+
+      {fillError && (
+        <div
+          style={{
+            position: "absolute",
+            top: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 200,
+            background: "rgba(200, 40, 40, 0.9)",
+            color: "#fff",
+            padding: "8px 20px",
+            borderRadius: 8,
+            fontSize: 14,
+            boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+          }}
+        >
+          {fillError}
+        </div>
+      )}
     </>
   );
 }
