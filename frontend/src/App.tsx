@@ -14,6 +14,7 @@ export default function App() {
   const { camera, pan, zoomAt, zoomIn, zoomOut } = useCamera();
   const { accountId, loading, signIn, signOut, callDraw } = useWallet();
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
+  const [cursorCoords, setCursorCoords] = useState<{ x: number; y: number } | null>(null);
 
   // Use a ref-based callback so useBoard can call handleDrawEvent without circular deps
   const drawEventCallbackRef = useRef<((event: DrawEventWS) => void) | null>(null);
@@ -55,6 +56,10 @@ export default function App() {
     setCanvasSize({ w, h });
   }, []);
 
+  const handleCursorMove = useCallback((worldX: number, worldY: number) => {
+    setCursorCoords({ x: Math.floor(worldX), y: Math.floor(worldY) });
+  }, []);
+
   return (
     <>
       <Board
@@ -73,6 +78,7 @@ export default function App() {
         onCanvasSize={handleCanvasSize}
         fillMode={fillMode}
         onFillAtPoint={fillAtPoint}
+        onCursorMove={handleCursorMove}
       />
 
       <WalletButton
@@ -109,6 +115,27 @@ export default function App() {
       />
 
       <ZoomControls onZoomIn={zoomIn} onZoomOut={zoomOut} />
+
+      {cursorCoords && (
+        <div
+          style={{
+            position: "absolute",
+            top: 16,
+            left: 16,
+            zIndex: 100,
+            background: "rgba(0, 0, 0, 0.5)",
+            color: "#fff",
+            padding: "4px 8px",
+            borderRadius: 6,
+            fontSize: 13,
+            fontFamily: "monospace",
+            pointerEvents: "none",
+            userSelect: "none",
+          }}
+        >
+          {cursorCoords.x}, {cursorCoords.y}
+        </div>
+      )}
 
       {fillError && (
         <div

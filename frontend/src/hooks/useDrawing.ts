@@ -11,7 +11,7 @@ type Stroke = Pixel[];
 const OWNERSHIP_DURATION_MS = 3_600_000;
 
 /** Maximum pixels a single flood fill can produce. */
-const FILL_LIMIT = 10_000;
+const FILL_LIMIT = 420;
 
 /** Sentinel for undrawn (unowned) pixels — distinct from drawn black "000000". */
 const UNDRAWN = "UNDRAWN";
@@ -90,8 +90,8 @@ export function useDrawing(
   // Pixels submitted to chain but not yet confirmed by WebSocket
   const submittedPixelsRef = useRef<Pixel[]>([]);
 
-  // Track timestamps for pixels we own (client-side hint to avoid wasted transactions)
-  const ownPixelTimestamps = useRef<Map<string, number>>(new Map());
+  // Track timestamps for all pixels seen via WS (client-side hint to avoid wasted transactions)
+  const pixelTimestamps = useRef<Map<string, number>>(new Map());
 
   const colorHex = color.replace("#", "").toUpperCase();
 
@@ -127,15 +127,14 @@ export function useDrawing(
   /** Called from useBoard when a WebSocket draw event arrives. */
   const handleDrawEvent = useCallback(
     (event: DrawEventWS) => {
-      if (!accountId || event.signer !== accountId) return;
       const now = Date.now();
-      const confirmed = new Set<string>();
+      // Track timestamps for ALL pixels (any signer)
       for (const pixel of event.pixels) {
-        ownPixelTimestamps.current.set(`${pixel.x},${pixel.y}`, now);
-        confirmed.add(`${pixel.x},${pixel.y}`);
+        pixelTimestamps.current.set(`${pixel.x},${pixel.y}`, now);
       }
-      // Remove confirmed pixels from submitted buffer
-      if (submittedPixelsRef.current.length > 0) {
+      // Only clear submitted buffer for our own events
+      if (accountId && event.signer === accountId && submittedPixelsRef.current.length > 0) {
+        const confirmed = new Set(event.pixels.map(p => `${p.x},${p.y}`));
         submittedPixelsRef.current = submittedPixelsRef.current.filter(
           (p) => !confirmed.has(`${p.x},${p.y}`)
         );
@@ -169,19 +168,16 @@ export function useDrawing(
           view[offset + 3] !== 0 || view[offset + 4] !== 0 || view[offset + 5] !== 0;
 
         if (hasOwner) {
-          // Pixel is owned — check our local timestamp cache
           const coordKey = `${px},${py}`;
-          const ownTs = ownPixelTimestamps.current.get(coordKey);
-          if (!ownTs) {
-            // We don't own this pixel (or don't know about it) — skip
-            return;
+          const ts = pixelTimestamps.current.get(coordKey);
+          if (ts) {
+            const ageMs = Date.now() - ts;
+            if (ageMs >= OWNERSHIP_DURATION_MS) {
+              // Pixel is permanent — skip
+              return;
+            }
           }
-          const ageMs = Date.now() - ownTs;
-          if (ageMs >= OWNERSHIP_DURATION_MS) {
-            // Pixel is permanent — skip
-            return;
-          }
-          // We own it and it's within the ownership window — allow
+          // Allow — either we know it's recent, or we don't know (optimistic)
         }
       }
 

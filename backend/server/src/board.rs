@@ -3,6 +3,7 @@ use common::valkey;
 use common::DrawEvent;
 use lru::LruCache;
 use redis::AsyncCommands;
+use std::collections::HashMap;
 use std::num::NonZero;
 
 /// One hour in milliseconds.
@@ -86,6 +87,7 @@ impl Board {
             let ts_key = valkey::pixel_ts_key(*rx, *ry);
             let mut applied_ts: Vec<(String, f64)> = Vec::new();
             let mut new_pixel_count: i64 = 0;
+            let mut stolen_from: HashMap<u32, i64> = HashMap::new();
 
             for &(lx, ly, r, g, b) in pixels {
                 let offset = pixel_offset(lx, ly);
@@ -113,11 +115,7 @@ impl Board {
                                 // Pixel is permanent — skip
                                 continue;
                             }
-                            if existing.owner_id != owner_id {
-                                // Within ownership period and different owner — skip
-                                continue;
-                            }
-                            // Same owner within ownership period — allow overwrite
+                            // Within ownership window — allow overwrite by anyone
                         }
                     }
                 }
@@ -125,6 +123,9 @@ impl Board {
                 // Track newly claimed pixels (undrawn → drawn)
                 if existing.is_empty() {
                     new_pixel_count += 1;
+                } else if existing.owner_id != owner_id {
+                    // Stealing a pixel from another user
+                    *stolen_from.entry(existing.owner_id).or_insert(0) += 1;
                 }
 
                 // Apply the pixel
@@ -171,13 +172,24 @@ impl Board {
                 .arg(event.block_timestamp_ms)
                 .ignore();
 
-            // Increment pixel count stats for newly claimed pixels
-            if new_pixel_count > 0 {
+            // Increment pixel count stats
+            let total_stolen: i64 = stolen_from.values().sum();
+            let owner_gain = new_pixel_count + total_stolen;
+            if owner_gain > 0 {
                 pipe.cmd("HINCRBY")
                     .arg(valkey::ACCOUNT_PIXEL_COUNT)
                     .arg(owner_id)
-                    .arg(new_pixel_count)
+                    .arg(owner_gain)
                     .ignore();
+            }
+            for (old_owner, count) in &stolen_from {
+                pipe.cmd("HINCRBY")
+                    .arg(valkey::ACCOUNT_PIXEL_COUNT)
+                    .arg(*old_owner)
+                    .arg(-*count)
+                    .ignore();
+            }
+            if new_pixel_count > 0 {
                 pipe.cmd("HINCRBY")
                     .arg(valkey::REGION_PIXEL_COUNT)
                     .arg(format!("{}:{}", rx, ry))

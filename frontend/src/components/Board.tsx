@@ -26,6 +26,7 @@ interface Props {
   onCanvasSize: (w: number, h: number) => void;
   fillMode: boolean;
   onFillAtPoint: (worldX: number, worldY: number) => void;
+  onCursorMove?: (worldX: number, worldY: number) => void;
 }
 
 export default function Board({
@@ -44,6 +45,7 @@ export default function Board({
   onCanvasSize,
   fillMode,
   onFillAtPoint,
+  onCursorMove,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isPanningRef = useRef(false);
@@ -207,17 +209,18 @@ export default function Board({
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
+      const { x, y } = screenToWorld(e.clientX, e.clientY);
+      onCursorMove?.(x, y);
       if (isPanningRef.current) {
         const dx = -(e.clientX - lastMouseRef.current.x) / camera.zoom;
         const dy = -(e.clientY - lastMouseRef.current.y) / camera.zoom;
         lastMouseRef.current = { x: e.clientX, y: e.clientY };
         onPan(dx, dy);
       } else if (mode === "draw" && !fillMode) {
-        const { x, y } = screenToWorld(e.clientX, e.clientY);
         onAddPixel(x, y);
       }
     },
-    [camera.zoom, mode, fillMode, screenToWorld, onPan, onAddPixel]
+    [camera.zoom, mode, fillMode, screenToWorld, onPan, onAddPixel, onCursorMove]
   );
 
   const handleMouseUp = useCallback(() => {
