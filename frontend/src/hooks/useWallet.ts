@@ -1,68 +1,66 @@
-import { useState, useEffect, useCallback } from "react";
-import { setupWalletSelector } from "@near-wallet-selector/core";
-import type { WalletSelector, AccountState } from "@near-wallet-selector/core";
-import { setupMyNearWallet } from "@near-wallet-selector/my-near-wallet";
-import { setupHereWallet } from "@near-wallet-selector/here-wallet";
-import { setupModal } from "@near-wallet-selector/modal-ui";
-import type { WalletSelectorModal } from "@near-wallet-selector/modal-ui";
-import "@near-wallet-selector/modal-ui/styles.css";
-import { CONTRACT_ID, NETWORK_ID } from "../lib/constants";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { NearConnector } from "@hot-labs/near-connect";
+import { CONTRACT_ID } from "../lib/constants";
 
 export function useWallet() {
-  const [selector, setSelector] = useState<WalletSelector | null>(null);
-  const [modal, setModal] = useState<WalletSelectorModal | null>(null);
-  const [accounts, setAccounts] = useState<AccountState[]>([]);
+  const connectorRef = useRef<NearConnector | null>(null);
+  const [accountId, setAccountId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let cancelled = false;
+    const connector = new NearConnector({ network: "mainnet" });
+    connectorRef.current = connector;
 
-    (async () => {
-      const walletSelector = await setupWalletSelector({
-        network: NETWORK_ID,
-        modules: [setupMyNearWallet(), setupHereWallet()],
-      });
+    connector.on("wallet:signIn", ({ accounts }) => {
+      setAccountId(accounts[0]?.accountId ?? null);
+    });
 
-      if (cancelled) return;
+    connector.on("wallet:signOut", () => {
+      setAccountId(null);
+    });
 
-      const walletModal = setupModal(walletSelector, {
-        contractId: CONTRACT_ID,
-      });
-
-      const state = walletSelector.store.getState();
-      setAccounts(state.accounts);
-
-      walletSelector.store.observable.subscribe((state) => {
-        setAccounts(state.accounts);
-      });
-
-      setSelector(walletSelector);
-      setModal(walletModal);
+    // Restore previous session
+    connector.getConnectedWallet().then(({ accounts }) => {
+      setAccountId(accounts[0]?.accountId ?? null);
+    }).catch(() => {
+      // No previous session
+    }).finally(() => {
       setLoading(false);
-    })();
+    });
 
     return () => {
-      cancelled = true;
+      connector.removeAllListeners();
     };
   }, []);
 
-  const accountId = accounts.find((a) => a.active)?.accountId ?? null;
-
-  const signIn = useCallback(() => {
-    modal?.show();
-  }, [modal]);
+  const signIn = useCallback(async () => {
+    const connector = connectorRef.current;
+    if (!connector) return;
+    try {
+      await connector.connect();
+    } catch {
+      // User cancelled or wallet error
+    }
+  }, []);
 
   const signOut = useCallback(async () => {
-    if (!selector) return;
-    const wallet = await selector.wallet();
-    await wallet.signOut();
-  }, [selector]);
+    const connector = connectorRef.current;
+    if (!connector) return;
+    try {
+      await connector.disconnect();
+    } catch {
+      // Ignore errors
+    }
+    setAccountId(null);
+  }, []);
 
   const callDraw = useCallback(
     async (pixels: Array<{ x: number; y: number; color: string }>) => {
-      if (!selector) return;
-      const wallet = await selector.wallet();
+      const connector = connectorRef.current;
+      if (!connector) return;
+      const wallet = await connector.wallet();
       await wallet.signAndSendTransaction({
+        receiverId: CONTRACT_ID,
         actions: [
           {
             type: "FunctionCall",
@@ -76,7 +74,7 @@ export function useWallet() {
         ],
       });
     },
-    [selector]
+    []
   );
 
   return { accountId, loading, signIn, signOut, callDraw };
