@@ -48,23 +48,37 @@ export default function Board({
   const lastMouseRef = useRef({ x: 0, y: 0 });
   const rafRef = useRef<number>(0);
 
-  // Resize canvas to fill viewport
+  // Resize canvas to fill parent, watching for DPR changes too
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const parent = canvas?.parentElement;
+    if (!canvas || !parent) return;
 
     const resize = () => {
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = window.innerWidth * dpr;
-      canvas.height = window.innerHeight * dpr;
-      canvas.style.width = `${window.innerWidth}px`;
-      canvas.style.height = `${window.innerHeight}px`;
+      const w = parent.clientWidth;
+      const h = parent.clientHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
       onCanvasSize(canvas.width, canvas.height);
     };
 
     resize();
-    window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
+
+    const ro = new ResizeObserver(resize);
+    ro.observe(parent);
+
+    // Re-measure when DPR changes (e.g. moving window between monitors)
+    const dprMedia = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    const onDprChange = () => resize();
+    dprMedia.addEventListener("change", onDprChange);
+
+    return () => {
+      ro.disconnect();
+      dprMedia.removeEventListener("change", onDprChange);
+    };
   }, [onCanvasSize]);
 
   // Render loop

@@ -13,9 +13,12 @@ const OWNERSHIP_DURATION_MS = 3_600_000;
 /** Maximum pixels a single flood fill can produce. */
 const FILL_LIMIT = 10_000;
 
-/** Read the effective RGB hex (6 chars, uppercase) for a pixel coordinate.
+/** Sentinel for undrawn (unowned) pixels — distinct from drawn black "000000". */
+const UNDRAWN = "UNDRAWN";
+
+/** Read the effective color for a pixel coordinate.
  *  Checks pending map first (last write wins), then falls back to region data.
- *  Returns null if the pixel has no region data loaded. */
+ *  Returns UNDRAWN for unowned pixels, null if region data not loaded. */
 function getPixelColor(
   px: number,
   py: number,
@@ -35,6 +38,11 @@ function getPixelColor(
   const ly = ((py % REGION_SIZE) + REGION_SIZE) % REGION_SIZE;
   const offset = (ly * REGION_SIZE + lx) * PIXEL_SIZE;
   const view = new Uint8Array(blob);
+
+  const hasOwner =
+    view[offset + 3] !== 0 || view[offset + 4] !== 0 || view[offset + 5] !== 0;
+  if (!hasOwner) return UNDRAWN;
+
   const r = view[offset];
   const g = view[offset + 1];
   const b = view[offset + 2];
