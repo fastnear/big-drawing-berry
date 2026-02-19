@@ -25,6 +25,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/regions", get(get_regions_batch))
         .route("/api/stats/accounts", get(get_account_stats))
         .route("/api/stats/region/{rx}/{ry}", get(get_region_stats))
+        .route("/api/open-regions", get(get_open_regions))
         .route("/api/health", get(health))
         .route("/ws", get(ws_upgrade))
         .with_state(state)
@@ -186,6 +187,31 @@ async fn get_region_stats(
         .unwrap_or(0);
 
     axum::Json(serde_json::json!({ "count": count }))
+}
+
+async fn get_open_regions(State(state): State<AppState>) -> impl IntoResponse {
+    let members: Vec<String> = state
+        .valkey
+        .clone()
+        .smembers(common::valkey::OPEN_REGIONS)
+        .await
+        .unwrap_or_default();
+
+    let regions: Vec<serde_json::Value> = members
+        .iter()
+        .filter_map(|s| {
+            let parts: Vec<&str> = s.split(':').collect();
+            if parts.len() == 2 {
+                let rx: i32 = parts[0].parse().ok()?;
+                let ry: i32 = parts[1].parse().ok()?;
+                Some(serde_json::json!({ "rx": rx, "ry": ry }))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    axum::Json(regions)
 }
 
 async fn ws_upgrade(

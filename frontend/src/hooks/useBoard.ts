@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import type { Camera, DrawEventWS } from "../lib/types";
 import { REGION_SIZE, PIXEL_SIZE } from "../lib/constants";
-import { fetchRegion, fetchRegionsBatch } from "../lib/api";
+import { fetchRegion, fetchRegionsBatch, fetchOpenRegions } from "../lib/api";
 import { getCachedRegion, setCachedRegion } from "../lib/region-cache";
 import { decodeRegionToImageData, getVisibleRegions } from "../lib/canvas-renderer";
 import { WebSocketClient } from "../lib/ws";
@@ -21,8 +21,9 @@ export function useBoard(
   const regionMetaRef = useRef<Map<string, number>>(new Map()); // key -> lastUpdated
   const fetchingRef = useRef<Set<string>>(new Set());
   const wsRef = useRef<WebSocketClient | null>(null);
+  const openRegionsRef = useRef<Set<string>>(new Set(["0:0"]));
 
-  // Connect WebSocket
+  // Connect WebSocket + fetch open regions
   useEffect(() => {
     const ws = new WebSocketClient();
     wsRef.current = ws;
@@ -32,6 +33,19 @@ export function useBoard(
       applyLivePixels(event);
       onDrawEvent?.(event);
     });
+
+    ws.onRegionsOpened((event) => {
+      for (const r of event.regions) {
+        openRegionsRef.current.add(`${r.rx}:${r.ry}`);
+      }
+    });
+
+    // Fetch initial open regions from server
+    fetchOpenRegions().then((regions) => {
+      for (const r of regions) {
+        openRegionsRef.current.add(`${r.rx}:${r.ry}`);
+      }
+    }).catch((e) => console.error("Failed to fetch open regions:", e));
 
     return () => ws.disconnect();
   }, []);
@@ -148,5 +162,5 @@ export function useBoard(
     })();
   }, [camera, canvasWidth, canvasHeight, rebuildImages]);
 
-  return { regionImages, regionDataRef };
+  return { regionImages, regionDataRef, openRegionsRef };
 }

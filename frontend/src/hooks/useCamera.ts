@@ -13,7 +13,7 @@ function parseHash(): Camera {
       return { x, y, zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom)) };
     }
   }
-  return { x: 0, y: 0, zoom: DEFAULT_ZOOM };
+  return { x: 64, y: 64, zoom: DEFAULT_ZOOM };
 }
 
 function updateHash(camera: Camera) {

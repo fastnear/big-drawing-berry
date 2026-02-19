@@ -46,10 +46,11 @@ impl Board {
     }
 
     /// Apply a draw event to the board, enforcing ownership rules.
-    /// Returns the list of pixels that were actually applied (for broadcasting).
-    pub async fn apply_event(&mut self, event: &DrawEvent) -> Vec<AppliedPixel> {
+    /// Returns (applied_pixels, newly_opened_regions).
+    pub async fn apply_event(&mut self, event: &DrawEvent) -> (Vec<AppliedPixel>, Vec<(i32, i32)>) {
         let owner_id = self.resolve_owner_id(&event.predecessor_id).await;
         let mut applied = Vec::new();
+        let mut newly_opened: Vec<(i32, i32)> = Vec::new();
 
         // Group pixels by region
         let mut region_pixels: std::collections::HashMap<(i32, i32), Vec<(usize, usize, u8, u8, u8)>> =
@@ -69,6 +70,18 @@ impl Board {
         }
 
         for ((rx, ry), pixels) in &region_pixels {
+            // Gate check: skip regions that are not open for drawing
+            let region_key_str = format!("{}:{}", rx, ry);
+            let is_open: bool = redis::cmd("SISMEMBER")
+                .arg(valkey::OPEN_REGIONS)
+                .arg(&region_key_str)
+                .query_async(&mut self.valkey)
+                .await
+                .unwrap_or(false);
+            if !is_open {
+                continue;
+            }
+
             let mut blob = self.get_region(*rx, *ry).await;
             let ts_key = valkey::pixel_ts_key(*rx, *ry);
             let mut applied_ts: Vec<(String, f64)> = Vec::new();
@@ -178,9 +191,39 @@ impl Board {
                 .unwrap_or_else(|e| {
                     tracing::error!("Failed to write region ({},{}): {}", rx, ry, e);
                 });
+
+            // Expansion check: if region crossed the threshold, open cardinal neighbors
+            if new_pixel_count > 0 {
+                let count: i64 = redis::cmd("HGET")
+                    .arg(valkey::REGION_PIXEL_COUNT)
+                    .arg(&region_key_str)
+                    .query_async(&mut self.valkey)
+                    .await
+                    .unwrap_or(0);
+
+                if count >= REGION_OPEN_THRESHOLD {
+                    let neighbors = [
+                        (*rx - 1, *ry),
+                        (*rx + 1, *ry),
+                        (*rx, *ry - 1),
+                        (*rx, *ry + 1),
+                    ];
+                    for (nx, ny) in neighbors {
+                        let added: i64 = redis::cmd("SADD")
+                            .arg(valkey::OPEN_REGIONS)
+                            .arg(format!("{}:{}", nx, ny))
+                            .query_async(&mut self.valkey)
+                            .await
+                            .unwrap_or(0);
+                        if added == 1 {
+                            newly_opened.push((nx, ny));
+                        }
+                    }
+                }
+            }
         }
 
-        applied
+        (applied, newly_opened)
     }
 
     /// Resolve an account_id to a u32 owner index, creating a new one if needed.

@@ -8,6 +8,9 @@ pub const PIXEL_SIZE: usize = 6;
 /// Total region blob size: 128 * 128 * 6 = 98,304 bytes.
 pub const REGION_BLOB_SIZE: usize = (REGION_SIZE as usize) * (REGION_SIZE as usize) * PIXEL_SIZE;
 
+/// Number of drawn pixels required to open a region's cardinal neighbors (~20%).
+pub const REGION_OPEN_THRESHOLD: i64 = (REGION_SIZE as i64 * REGION_SIZE as i64) / 5;
+
 /// A stored pixel with color and owner. owner_id=0 means undrawn.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Pixel {

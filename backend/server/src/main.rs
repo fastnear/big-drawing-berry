@@ -35,6 +35,13 @@ async fn main() -> anyhow::Result<()> {
     let valkey_client = redis::Client::open(config.valkey_url.as_str())?;
     let valkey_con = valkey_client.get_multiplexed_async_connection().await?;
 
+    // Seed region (0,0) as open (idempotent)
+    let _: i64 = redis::cmd("SADD")
+        .arg(common::valkey::OPEN_REGIONS)
+        .arg("0:0")
+        .query_async(&mut valkey_con.clone())
+        .await?;
+
     let (broadcast_tx, _) = broadcast::channel::<String>(4096);
 
     let board = Arc::new(tokio::sync::RwLock::new(

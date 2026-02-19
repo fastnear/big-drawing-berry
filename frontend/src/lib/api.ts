@@ -1,5 +1,5 @@
 import { API_BASE } from "./constants";
-import type { RegionMeta } from "./types";
+import type { RegionCoord, RegionMeta } from "./types";
 
 export async function fetchRegion(rx: number, ry: number): Promise<{
   data: ArrayBuffer;
@@ -21,5 +21,10 @@ export async function fetchRegionsBatch(
 ): Promise<RegionMeta[]> {
   const param = coords.map(([rx, ry]) => `${rx},${ry}`).join(",");
   const res = await fetch(`${API_BASE}/api/regions?coords=${param}`);
+  return res.json();
+}
+
+export async function fetchOpenRegions(): Promise<RegionCoord[]> {
+  const res = await fetch(`${API_BASE}/api/open-regions`);
   return res.json();
 }

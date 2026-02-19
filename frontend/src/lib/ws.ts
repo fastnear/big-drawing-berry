@@ -1,11 +1,13 @@
 import { WS_URL } from "./constants";
-import type { DrawEventWS } from "./types";
+import type { DrawEventWS, RegionsOpenedEvent, WSEvent } from "./types";
 
-type EventHandler = (event: DrawEventWS) => void;
+type DrawHandler = (event: DrawEventWS) => void;
+type RegionsOpenedHandler = (event: RegionsOpenedEvent) => void;
 
 export class WebSocketClient {
   private ws: WebSocket | null = null;
-  private handlers: EventHandler[] = [];
+  private handlers: DrawHandler[] = [];
+  private regionsOpenedHandlers: RegionsOpenedHandler[] = [];
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private lastTimestamp = 0;
 
@@ -29,10 +31,14 @@ export class WebSocketClient {
 
     this.ws.onmessage = (e) => {
       try {
-        const event: DrawEventWS = JSON.parse(e.data);
+        const event: WSEvent = JSON.parse(e.data);
         if (event.type === "draw") {
           this.lastTimestamp = Math.max(this.lastTimestamp, event.block_timestamp_ms);
           for (const handler of this.handlers) {
+            handler(event);
+          }
+        } else if (event.type === "regions_opened") {
+          for (const handler of this.regionsOpenedHandlers) {
             handler(event);
           }
         }
@@ -60,10 +66,17 @@ export class WebSocketClient {
     }, 2000);
   }
 
-  onDraw(handler: EventHandler) {
+  onDraw(handler: DrawHandler) {
     this.handlers.push(handler);
     return () => {
       this.handlers = this.handlers.filter((h) => h !== handler);
+    };
+  }
+
+  onRegionsOpened(handler: RegionsOpenedHandler) {
+    this.regionsOpenedHandlers.push(handler);
+    return () => {
+      this.regionsOpenedHandlers = this.regionsOpenedHandlers.filter((h) => h !== handler);
     };
   }
 

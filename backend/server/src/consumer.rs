@@ -57,7 +57,7 @@ pub async fn run(
         };
 
         // Apply to board
-        let applied = {
+        let (applied, newly_opened) = {
             let mut board = board.write().await;
             board.apply_event(&event).await
         };
@@ -91,6 +91,17 @@ pub async fn run(
 
             // Broadcast to WebSocket subscribers
             let _ = broadcast_tx.send(ws_json);
+
+            // Broadcast newly opened regions
+            if !newly_opened.is_empty() {
+                let regions_event = serde_json::json!({
+                    "type": "regions_opened",
+                    "regions": newly_opened.iter().map(|(rx, ry)| {
+                        serde_json::json!({ "rx": rx, "ry": ry })
+                    }).collect::<Vec<_>>()
+                });
+                let _ = broadcast_tx.send(regions_event.to_string());
+            }
         } else {
             // Remove from processing queue after successful processing
             let _: () = con

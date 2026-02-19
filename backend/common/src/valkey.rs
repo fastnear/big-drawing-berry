@@ -22,6 +22,9 @@ pub const ACCOUNT_PIXEL_COUNT: &str = "account_pixel_count";
 /// Hash: "rx:ry" → pixel count (i64). Tracks drawn pixels per region.
 pub const REGION_PIXEL_COUNT: &str = "region_pixel_count";
 
+/// Set of "rx:ry" strings for regions that are open for drawing.
+pub const OPEN_REGIONS: &str = "open_regions";
+
 /// Build the Valkey key for a region blob.
 pub fn region_key(rx: i32, ry: i32) -> String {
     format!("region:{rx}:{ry}")

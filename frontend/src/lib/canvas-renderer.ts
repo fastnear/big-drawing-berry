@@ -46,7 +46,8 @@ export function renderBoard(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
   camera: Camera,
-  regionImages: Map<string, ImageBitmap>
+  regionImages: Map<string, ImageBitmap>,
+  openRegions?: Set<string>
 ) {
   const { width, height } = canvas;
   const { x: cx, y: cy, zoom } = camera;
@@ -74,8 +75,6 @@ export function renderBoard(
   for (let ry = minRy; ry <= maxRy; ry++) {
     for (let rx = minRx; rx <= maxRx; rx++) {
       const key = `${rx}:${ry}`;
-      const img = regionImages.get(key);
-      if (!img) continue;
 
       // World position of this region's top-left corner
       const wx = rx * REGION_SIZE;
@@ -87,7 +86,16 @@ export function renderBoard(
       const sw = REGION_SIZE * zoom;
       const sh = REGION_SIZE * zoom;
 
-      ctx.drawImage(img, sx, sy, sw, sh);
+      const img = regionImages.get(key);
+      if (img) {
+        ctx.drawImage(img, sx, sy, sw, sh);
+      }
+
+      // Gray overlay for locked (non-open) regions
+      if (openRegions && !openRegions.has(key)) {
+        ctx.fillStyle = "rgba(80, 80, 80, 0.7)";
+        ctx.fillRect(sx, sy, sw, sh);
+      }
     }
   }
 

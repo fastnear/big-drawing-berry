@@ -27,3 +27,10 @@ export interface RegionCoord {
   rx: number;
   ry: number;
 }
+
+export interface RegionsOpenedEvent {
+  type: "regions_opened";
+  regions: RegionCoord[];
+}
+
+export type WSEvent = DrawEventWS | RegionsOpenedEvent;

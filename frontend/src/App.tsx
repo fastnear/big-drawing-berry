@@ -21,7 +21,7 @@ export default function App() {
     drawEventCallbackRef.current?.(event);
   }, []);
 
-  const { regionImages, regionDataRef } = useBoard(camera, canvasSize.w, canvasSize.h, onDrawEvent);
+  const { regionImages, regionDataRef, openRegionsRef } = useBoard(camera, canvasSize.w, canvasSize.h, onDrawEvent);
 
   const {
     mode,
@@ -44,7 +44,7 @@ export default function App() {
     redo,
     canUndo,
     canRedo,
-  } = useDrawing(callDraw, accountId, regionDataRef);
+  } = useDrawing(callDraw, accountId, regionDataRef, openRegionsRef);
 
   // Wire the callback ref to the actual handler
   useEffect(() => {
@@ -63,6 +63,7 @@ export default function App() {
         mode={mode}
         pendingPixels={pendingPixels}
         regionDataRef={regionDataRef}
+        openRegionsRef={openRegionsRef}
         onPan={pan}
         onZoomAt={zoomAt}
         onStartDrawing={startDrawing}

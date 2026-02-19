@@ -10,6 +10,7 @@ interface Props {
   mode: Mode;
   pendingPixels: Array<{ x: number; y: number; color: string }>;
   regionDataRef: React.RefObject<Map<string, ArrayBuffer>>;
+  openRegionsRef: React.RefObject<Set<string>>;
   onPan: (dx: number, dy: number) => void;
   onZoomAt: (
     factor: number,
@@ -33,6 +34,7 @@ export default function Board({
   mode,
   pendingPixels,
   regionDataRef,
+  openRegionsRef,
   onPan,
   onZoomAt,
   onStartDrawing,
@@ -91,7 +93,7 @@ export default function Board({
     const dpr = window.devicePixelRatio || 1;
     const scaledCamera = { ...camera, zoom: camera.zoom * dpr };
 
-    renderBoard(ctx, canvas, scaledCamera, regionImages);
+    renderBoard(ctx, canvas, scaledCamera, regionImages, openRegionsRef.current);
 
     // Draw pending pixels
     if (pendingPixels.length > 0) {
@@ -109,7 +111,7 @@ export default function Board({
         ctx.strokeRect(sx, sy, zoom, zoom);
       }
     }
-  }, [camera, regionImages, pendingPixels]);
+  }, [camera, regionImages, pendingPixels, openRegionsRef]);
 
   // Screen to world coordinate conversion
   const screenToWorld = useCallback(

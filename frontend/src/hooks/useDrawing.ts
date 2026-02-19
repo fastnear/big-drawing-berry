@@ -70,7 +70,8 @@ function derivePixels(strokes: Stroke[], currentStroke: Stroke): Pixel[] {
 export function useDrawing(
   callDraw: (pixels: Array<{ x: number; y: number; color: string }>) => Promise<void>,
   accountId: string | null,
-  regionDataRef: React.RefObject<Map<string, ArrayBuffer>>
+  regionDataRef: React.RefObject<Map<string, ArrayBuffer>>,
+  openRegionsRef: React.RefObject<Set<string>>
 ) {
   const [mode, setMode] = useState<Mode>("move");
   const [color, setColor] = useState("#FF5733");
@@ -151,10 +152,13 @@ export function useDrawing(
       const px = Math.floor(worldX);
       const py = Math.floor(worldY);
 
-      // Client-side ownership hint: check if pixel is drawable
+      // Block drawing in locked regions
       const rx = Math.floor(px / REGION_SIZE);
       const ry = Math.floor(py / REGION_SIZE);
       const key = `${rx}:${ry}`;
+      if (openRegionsRef.current && !openRegionsRef.current.has(key)) return;
+
+      // Client-side ownership hint: check if pixel is drawable
       const blob = regionDataRef.current?.get(key);
       if (blob) {
         const lx = ((px % REGION_SIZE) + REGION_SIZE) % REGION_SIZE;
@@ -193,7 +197,7 @@ export function useDrawing(
 
       recomputePending();
     },
-    [mode, accountId, colorHex, regionDataRef, recomputePending]
+    [mode, accountId, colorHex, regionDataRef, openRegionsRef, recomputePending]
   );
 
   const fillAtPoint = useCallback(
@@ -204,6 +208,11 @@ export function useDrawing(
 
       const px = Math.floor(worldX);
       const py = Math.floor(worldY);
+
+      // Block fill in locked regions
+      const fillRx = Math.floor(px / REGION_SIZE);
+      const fillRy = Math.floor(py / REGION_SIZE);
+      if (openRegionsRef.current && !openRegionsRef.current.has(`${fillRx}:${fillRy}`)) return;
 
       // Build a pending pixel map (last write wins)
       const pendingMap = new Map<string, string>();
@@ -233,6 +242,10 @@ export function useDrawing(
           const nk = `${nx},${ny}`;
           if (visited.has(nk)) continue;
           visited.add(nk);
+          // Don't fill into locked regions
+          const nrx = Math.floor(nx / REGION_SIZE);
+          const nry = Math.floor(ny / REGION_SIZE);
+          if (openRegionsRef.current && !openRegionsRef.current.has(`${nrx}:${nry}`)) continue;
           const nc = getPixelColor(nx, ny, pendingMap, regionData);
           if (nc === targetColor) {
             queue.push([nx, ny]);
@@ -255,7 +268,7 @@ export function useDrawing(
       recomputePending();
       setFillMode(false);
     },
-    [mode, accountId, colorHex, regionDataRef, recomputePending]
+    [mode, accountId, colorHex, regionDataRef, openRegionsRef, recomputePending]
   );
 
   const undo = useCallback(() => {
@@ -308,13 +321,19 @@ export function useDrawing(
     if (mode !== "draw") return;
     const handler = (e: KeyboardEvent) => {
       const ctrl = e.ctrlKey || e.metaKey;
-      if (!ctrl) return;
-      if (e.key === "z" && !e.shiftKey) {
+      if (ctrl) {
+        if (e.key === "z" && !e.shiftKey) {
+          e.preventDefault();
+          undo();
+        } else if ((e.key === "z" && e.shiftKey) || e.key === "y") {
+          e.preventDefault();
+          redo();
+        }
+        return;
+      }
+      if (e.key === "g" || e.key === "G") {
         e.preventDefault();
-        undo();
-      } else if ((e.key === "z" && e.shiftKey) || e.key === "y") {
-        e.preventDefault();
-        redo();
+        setFillMode((prev) => !prev);
       }
     };
     window.addEventListener("keydown", handler);
