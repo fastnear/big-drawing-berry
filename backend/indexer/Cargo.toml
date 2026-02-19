@@ -15,4 +15,5 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 base64 = "0.22"
 anyhow = "1"
-ctrlc = "3"
+dotenvy = "0.15"
+signal-hook = "0.3"

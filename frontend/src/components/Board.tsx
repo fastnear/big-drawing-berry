@@ -233,23 +233,26 @@ export default function Board({
     dist: 0,
   });
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    const touches = Array.from(e.touches).map((t) => ({
-      x: t.clientX,
-      y: t.clientY,
-    }));
-    let dist = 0;
-    if (touches.length === 2) {
-      dist = Math.hypot(
-        touches[1].x - touches[0].x,
-        touches[1].y - touches[0].y
-      );
-    }
-    touchStartRef.current = { touches, dist };
-  }, []);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-  const handleTouchMove = useCallback(
-    (e: React.TouchEvent) => {
+    const onTouchStart = (e: TouchEvent) => {
+      const touches = Array.from(e.touches).map((t) => ({
+        x: t.clientX,
+        y: t.clientY,
+      }));
+      let dist = 0;
+      if (touches.length === 2) {
+        dist = Math.hypot(
+          touches[1].x - touches[0].x,
+          touches[1].y - touches[0].y
+        );
+      }
+      touchStartRef.current = { touches, dist };
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
       e.preventDefault();
       const touches = Array.from(e.touches).map((t) => ({
         x: t.clientX,
@@ -258,12 +261,10 @@ export default function Board({
       const prev = touchStartRef.current;
 
       if (touches.length === 1 && prev.touches.length >= 1) {
-        // Pan
         const dx = -(touches[0].x - prev.touches[0].x) / camera.zoom;
         const dy = -(touches[0].y - prev.touches[0].y) / camera.zoom;
         onPan(dx, dy);
       } else if (touches.length === 2 && prev.touches.length === 2) {
-        // Pinch zoom
         const dist = Math.hypot(
           touches[1].x - touches[0].x,
           touches[1].y - touches[0].y
@@ -272,11 +273,8 @@ export default function Board({
           const factor = dist / prev.dist;
           const midX = (touches[0].x + touches[1].x) / 2;
           const midY = (touches[0].y + touches[1].y) / 2;
-          const canvas = canvasRef.current;
-          if (canvas) {
-            const dpr = window.devicePixelRatio || 1;
-            onZoomAt(factor, midX * dpr, midY * dpr, canvas.width, canvas.height);
-          }
+          const dpr = window.devicePixelRatio || 1;
+          onZoomAt(factor, midX * dpr, midY * dpr, canvas.width, canvas.height);
         }
       }
 
@@ -288,9 +286,15 @@ export default function Board({
         );
       }
       touchStartRef.current = { touches, dist };
-    },
-    [camera.zoom, onPan, onZoomAt]
-  );
+    };
+
+    canvas.addEventListener("touchstart", onTouchStart, { passive: true });
+    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      canvas.removeEventListener("touchstart", onTouchStart);
+      canvas.removeEventListener("touchmove", onTouchMove);
+    };
+  }, [camera.zoom, onPan, onZoomAt]);
 
   return (
     <canvas
@@ -306,8 +310,6 @@ export default function Board({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
       onTouchEnd={handleMouseUp}
     />
   );

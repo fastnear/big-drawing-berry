@@ -2,16 +2,19 @@ mod processor;
 
 use fastnear_neardata_fetcher::{FetcherConfigBuilder, start_fetcher};
 use redis::AsyncCommands;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let _ = dotenvy::dotenv();
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("indexer=info".parse().unwrap()),
+                .add_directive("indexer=info".parse().unwrap())
+                .add_directive("neardata-fetcher=info".parse().unwrap()),
         )
         .init();
 
@@ -31,12 +34,8 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let is_running = Arc::new(AtomicBool::new(true));
-    let is_running_clone = is_running.clone();
-
-    ctrlc::set_handler(move || {
-        tracing::info!("Shutting down...");
-        is_running_clone.store(false, Ordering::SeqCst);
-    })?;
+    signal_hook::flag::register_conditional_default(signal_hook::consts::SIGINT, is_running.clone())?;
+    signal_hook::flag::register_conditional_default(signal_hook::consts::SIGTERM, is_running.clone())?;
 
     let (blocks_tx, blocks_rx) = mpsc::channel(100);
 
@@ -46,6 +45,10 @@ async fn main() -> anyhow::Result<()> {
 
     if let Some(height) = start_block {
         builder = builder.start_block_height(height);
+    }
+
+    if let Ok(token) = std::env::var("AUTH_BEARER_TOKEN") {
+        builder = builder.auth_bearer_token(token);
     }
 
     let config = builder.build();
