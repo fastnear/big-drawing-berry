@@ -78,15 +78,25 @@ export function useDrawing(
   const redoStackRef = useRef<Stroke[]>([]);
   const currentStrokeRef = useRef<Stroke>([]);
 
+  // Pixels submitted to chain but not yet confirmed by WebSocket
+  const submittedPixelsRef = useRef<Pixel[]>([]);
+
   // Track timestamps for pixels we own (client-side hint to avoid wasted transactions)
   const ownPixelTimestamps = useRef<Map<string, number>>(new Map());
 
   const colorHex = color.replace("#", "").toUpperCase();
 
   const recomputePending = useCallback(() => {
-    setPendingPixels(
-      derivePixels(strokesRef.current, currentStrokeRef.current)
-    );
+    const drawn = derivePixels(strokesRef.current, currentStrokeRef.current);
+    // Merge submitted (awaiting WS confirmation) with current drawing
+    const map = new Map<string, Pixel>();
+    for (const p of submittedPixelsRef.current) {
+      map.set(`${p.x},${p.y}`, p);
+    }
+    for (const p of drawn) {
+      map.set(`${p.x},${p.y}`, p);
+    }
+    setPendingPixels(Array.from(map.values()));
   }, []);
 
   const startDrawing = useCallback(() => {
@@ -110,11 +120,20 @@ export function useDrawing(
     (event: DrawEventWS) => {
       if (!accountId || event.signer !== accountId) return;
       const now = Date.now();
+      const confirmed = new Set<string>();
       for (const pixel of event.pixels) {
         ownPixelTimestamps.current.set(`${pixel.x},${pixel.y}`, now);
+        confirmed.add(`${pixel.x},${pixel.y}`);
+      }
+      // Remove confirmed pixels from submitted buffer
+      if (submittedPixelsRef.current.length > 0) {
+        submittedPixelsRef.current = submittedPixelsRef.current.filter(
+          (p) => !confirmed.has(`${p.x},${p.y}`)
+        );
+        recomputePending();
       }
     },
-    [accountId]
+    [accountId, recomputePending]
   );
 
   const addPixel = useCallback(
@@ -255,10 +274,12 @@ export function useDrawing(
     setIsSending(true);
     try {
       await callDraw(pendingPixels);
+      // Move to submitted buffer — they stay visible until WS confirms
+      submittedPixelsRef.current = [...submittedPixelsRef.current, ...pendingPixels];
       strokesRef.current = [];
       redoStackRef.current = [];
       currentStrokeRef.current = [];
-      setPendingPixels([]);
+      recomputePending();
     } catch (e) {
       console.error("Failed to submit pixels:", e);
     } finally {
@@ -270,6 +291,7 @@ export function useDrawing(
     strokesRef.current = [];
     redoStackRef.current = [];
     currentStrokeRef.current = [];
+    submittedPixelsRef.current = [];
     setPendingPixels([]);
   }, []);
 
