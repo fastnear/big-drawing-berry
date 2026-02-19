@@ -163,7 +163,7 @@ const styles: Record<string, React.CSSProperties> = {
   modeActive: {
     background: "rgba(255,255,255,0.15)",
     color: "#fff",
-    borderColor: "rgba(255,255,255,0.4)",
+    border: "1px solid rgba(255,255,255,0.4)",
   },
   colorPicker: {
     width: 36,

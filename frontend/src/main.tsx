@@ -1,3 +1,6 @@
+import { Buffer } from "buffer";
+globalThis.Buffer = Buffer;
+
 import { createRoot } from "react-dom/client";
 import { WalletSelectorProvider } from "@near-wallet-selector/react-hook";
 import { setupMyNearWallet } from "@near-wallet-selector/my-near-wallet";

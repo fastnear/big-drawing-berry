@@ -208,12 +208,12 @@ export default function Board({
     onStopDrawing();
   }, [onStopDrawing]);
 
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const handler = (e: WheelEvent) => {
       e.preventDefault();
       const factor = e.deltaY > 0 ? 0.99 : 1.01;
-      const canvas = canvasRef.current;
-      if (!canvas) return;
       const dpr = window.devicePixelRatio || 1;
       onZoomAt(
         factor,
@@ -222,9 +222,10 @@ export default function Board({
         canvas.width,
         canvas.height
       );
-    },
-    [onZoomAt]
-  );
+    };
+    canvas.addEventListener("wheel", handler, { passive: false });
+    return () => canvas.removeEventListener("wheel", handler);
+  }, [onZoomAt]);
 
   // Touch handlers for mobile pan/pinch
   const touchStartRef = useRef<{ touches: Array<{ x: number; y: number }>; dist: number }>({
@@ -305,7 +306,6 @@ export default function Board({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
-      onWheel={handleWheel}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleMouseUp}
