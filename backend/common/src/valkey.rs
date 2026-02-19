@@ -17,16 +17,16 @@ pub const ID_TO_ACCOUNT: &str = "id_to_account";
 pub const DRAW_EVENTS_ZSET: &str = "draw_events";
 
 /// Build the Valkey key for a region blob.
-pub fn region_key(rx: i64, ry: i64) -> String {
+pub fn region_key(rx: i32, ry: i32) -> String {
     format!("region:{rx}:{ry}")
 }
 
 /// Build the Valkey key for region metadata.
-pub fn region_meta_key(rx: i64, ry: i64) -> String {
+pub fn region_meta_key(rx: i32, ry: i32) -> String {
     format!("region_meta:{rx}:{ry}")
 }
 
 /// Build the Valkey key for per-region pixel timestamp sorted set.
-pub fn pixel_ts_key(rx: i64, ry: i64) -> String {
+pub fn pixel_ts_key(rx: i32, ry: i32) -> String {
     format!("pixel_ts:{rx}:{ry}")
 }

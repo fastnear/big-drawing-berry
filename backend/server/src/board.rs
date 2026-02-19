@@ -10,7 +10,7 @@ const OWNERSHIP_DURATION_NS: u64 = 3_600_000_000_000;
 
 pub struct Board {
     /// LRU cache of region blobs keyed by (rx, ry).
-    cache: LruCache<(i64, i64), Vec<u8>>,
+    cache: LruCache<(i32, i32), Vec<u8>>,
     valkey: redis::aio::MultiplexedConnection,
 }
 
@@ -23,7 +23,7 @@ impl Board {
     }
 
     /// Get or load a region blob. Returns a clone of the data.
-    pub async fn get_region(&mut self, rx: i64, ry: i64) -> Vec<u8> {
+    pub async fn get_region(&mut self, rx: i32, ry: i32) -> Vec<u8> {
         if let Some(blob) = self.cache.get(&(rx, ry)) {
             return blob.clone();
         }
@@ -52,7 +52,7 @@ impl Board {
         let mut applied = Vec::new();
 
         // Group pixels by region
-        let mut region_pixels: std::collections::HashMap<(i64, i64), Vec<(usize, usize, u8, u8, u8)>> =
+        let mut region_pixels: std::collections::HashMap<(i32, i32), Vec<(usize, usize, u8, u8, u8)>> =
             std::collections::HashMap::new();
 
         for pixel in &event.pixels {
@@ -119,8 +119,8 @@ impl Board {
 
                 applied_ts.push((format!("{lx},{ly}"), event.block_timestamp as f64));
                 applied.push(AppliedPixel {
-                    x: *rx * REGION_SIZE + lx as i64,
-                    y: *ry * REGION_SIZE + ly as i64,
+                    x: *rx * REGION_SIZE + lx as i32,
+                    y: *ry * REGION_SIZE + ly as i32,
                     r,
                     g,
                     b,
@@ -222,8 +222,8 @@ impl Board {
 
 #[derive(Debug, Clone)]
 pub struct AppliedPixel {
-    pub x: i64,
-    pub y: i64,
+    pub x: i32,
+    pub y: i32,
     pub r: u8,
     pub g: u8,
     pub b: u8,

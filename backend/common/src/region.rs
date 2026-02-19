@@ -1,5 +1,5 @@
 /// Region size in pixels (128x128).
-pub const REGION_SIZE: i64 = 128;
+pub const REGION_SIZE: i32 = 128;
 
 /// Per-pixel binary size: 3 (RGB) + 3 (owner_id u24) = 6 bytes.
 /// Timestamps are stored in per-region Valkey sorted sets (`pixel_ts:{rx}:{ry}`).
@@ -18,12 +18,12 @@ pub struct Pixel {
 }
 
 /// Compute which region a world-space pixel coordinate falls in.
-pub fn region_coords(x: i64, y: i64) -> (i64, i64) {
+pub fn region_coords(x: i32, y: i32) -> (i32, i32) {
     (x.div_euclid(REGION_SIZE), y.div_euclid(REGION_SIZE))
 }
 
 /// Compute the local offset within a region for a world-space coordinate.
-pub fn local_coords(x: i64, y: i64) -> (usize, usize) {
+pub fn local_coords(x: i32, y: i32) -> (usize, usize) {
     (
         x.rem_euclid(REGION_SIZE) as usize,
         y.rem_euclid(REGION_SIZE) as usize,

@@ -30,7 +30,7 @@ pub fn router(state: AppState) -> Router {
 
 async fn get_region(
     State(state): State<AppState>,
-    Path((rx, ry)): Path<(i64, i64)>,
+    Path((rx, ry)): Path<(i32, i32)>,
 ) -> impl IntoResponse {
     let blob = {
         let mut board = state.board.write().await;
@@ -65,7 +65,7 @@ async fn get_region(
 
 async fn get_region_meta(
     State(state): State<AppState>,
-    Path((rx, ry)): Path<(i64, i64)>,
+    Path((rx, ry)): Path<(i32, i32)>,
 ) -> impl IntoResponse {
     let last_updated: Option<u64> = state
         .valkey
@@ -90,7 +90,7 @@ async fn get_regions_batch(
     State(state): State<AppState>,
     Query(query): Query<BatchQuery>,
 ) -> impl IntoResponse {
-    let coords: Vec<i64> = query
+    let coords: Vec<i32> = query
         .coords
         .split(',')
         .filter_map(|s| s.trim().parse().ok())

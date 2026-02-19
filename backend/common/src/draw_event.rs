@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 /// A single pixel in a draw call's arguments.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DrawPixel {
-    pub x: i64,
-    pub y: i64,
+    pub x: i32,
+    pub y: i32,
     /// Hex color string, e.g. "FF5733"
     pub color: String,
 }
