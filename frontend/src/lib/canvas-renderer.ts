@@ -7,8 +7,8 @@ import type { Camera } from "./types";
 
 /**
  * Decode a region binary blob into an RGBA ImageData-compatible Uint8ClampedArray.
- * Each pixel is 15 bytes: R, G, B, owner_id(4), timestamp(8).
- * We extract just the RGB and set alpha to 255 for drawn pixels, 0 for empty (timestamp=0).
+ * Each pixel is 6 bytes: R, G, B, owner_id(3 bytes LE, 0 = undrawn).
+ * We extract just the RGB and set alpha to 255 for drawn pixels, 0 for empty.
  */
 export function decodeRegionToImageData(
   blob: ArrayBuffer
@@ -21,19 +21,13 @@ export function decodeRegionToImageData(
     const srcOff = i * PIXEL_SIZE;
     const dstOff = i * 4;
 
-    // Check if pixel is drawn by looking at timestamp (bytes 7-14)
-    // Quick check: if all 15 bytes are 0, it's undrawn
-    const hasTimestamp =
-      src[srcOff + 7] !== 0 ||
-      src[srcOff + 8] !== 0 ||
-      src[srcOff + 9] !== 0 ||
-      src[srcOff + 10] !== 0 ||
-      src[srcOff + 11] !== 0 ||
-      src[srcOff + 12] !== 0 ||
-      src[srcOff + 13] !== 0 ||
-      src[srcOff + 14] !== 0;
+    // Check if pixel is drawn by looking at owner_id bytes (offset 3-5)
+    const hasOwner =
+      src[srcOff + 3] !== 0 ||
+      src[srcOff + 4] !== 0 ||
+      src[srcOff + 5] !== 0;
 
-    if (hasTimestamp) {
+    if (hasOwner) {
       dst[dstOff] = src[srcOff]; // R
       dst[dstOff + 1] = src[srcOff + 1]; // G
       dst[dstOff + 2] = src[srcOff + 2]; // B

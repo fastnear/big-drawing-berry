@@ -8,9 +8,14 @@ import { WebSocketClient } from "../lib/ws";
 
 /**
  * Manages region data fetching, caching, and live WebSocket updates.
- * Returns a Map of region keys to ImageBitmaps for rendering.
+ * Returns a Map of region keys to ImageBitmaps for rendering, plus regionDataRef.
  */
-export function useBoard(camera: Camera, canvasWidth: number, canvasHeight: number) {
+export function useBoard(
+  camera: Camera,
+  canvasWidth: number,
+  canvasHeight: number,
+  onDrawEvent?: (event: DrawEventWS) => void
+) {
   const [regionImages, setRegionImages] = useState<Map<string, ImageBitmap>>(new Map());
   const regionDataRef = useRef<Map<string, ArrayBuffer>>(new Map());
   const regionMetaRef = useRef<Map<string, number>>(new Map()); // key -> lastUpdated
@@ -25,6 +30,7 @@ export function useBoard(camera: Camera, canvasWidth: number, canvasHeight: numb
 
     ws.onDraw((event: DrawEventWS) => {
       applyLivePixels(event);
+      onDrawEvent?.(event);
     });
 
     return () => ws.disconnect();
@@ -54,11 +60,10 @@ export function useBoard(camera: Camera, canvasWidth: number, canvasHeight: numb
       view[offset] = r;
       view[offset + 1] = g;
       view[offset + 2] = b;
-      // We don't update owner/timestamp in the frontend cache - that's server-side only
 
-      // Set a non-zero timestamp so the pixel renders as drawn
-      if (view[offset + 7] === 0) {
-        view[offset + 7] = 1; // minimal non-zero marker
+      // Set a non-zero owner_id so the pixel renders as drawn
+      if (view[offset + 3] === 0 && view[offset + 4] === 0 && view[offset + 5] === 0) {
+        view[offset + 3] = 1; // minimal non-zero marker
       }
 
       affectedRegions.add(key);
@@ -143,5 +148,5 @@ export function useBoard(camera: Camera, canvasWidth: number, canvasHeight: numb
     })();
   }, [camera, canvasWidth, canvasHeight, rebuildImages]);
 
-  return regionImages;
+  return { regionImages, regionDataRef };
 }

@@ -2,7 +2,7 @@ export const CONTRACT_ID = "berryfast.near";
 export const NETWORK_ID = "mainnet";
 
 export const REGION_SIZE = 128;
-export const PIXEL_SIZE = 15; // 3 (RGB) + 4 (owner_id) + 8 (timestamp)
+export const PIXEL_SIZE = 6; // 3 (RGB) + 3 (owner_id u24)
 export const REGION_BLOB_SIZE = REGION_SIZE * REGION_SIZE * PIXEL_SIZE;
 
 export const MIN_ZOOM = 0.5;

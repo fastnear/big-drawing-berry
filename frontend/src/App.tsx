@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useCamera } from "./hooks/useCamera";
 import { useWallet } from "./hooks/useWallet";
 import { useBoard } from "./hooks/useBoard";
@@ -8,13 +8,20 @@ import WalletButton from "./components/WalletButton";
 import Toolbar from "./components/Toolbar";
 import Minimap from "./components/Minimap";
 import ZoomControls from "./components/ZoomControls";
+import type { DrawEventWS } from "./lib/types";
 
 export default function App() {
   const { camera, pan, zoomAt, zoomIn, zoomOut } = useCamera();
   const { accountId, loading, signIn, signOut, callDraw } = useWallet();
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
 
-  const regionImages = useBoard(camera, canvasSize.w, canvasSize.h);
+  // Use a ref-based callback so useBoard can call handleDrawEvent without circular deps
+  const drawEventCallbackRef = useRef<((event: DrawEventWS) => void) | null>(null);
+  const onDrawEvent = useCallback((event: DrawEventWS) => {
+    drawEventCallbackRef.current?.(event);
+  }, []);
+
+  const { regionImages, regionDataRef } = useBoard(camera, canvasSize.w, canvasSize.h, onDrawEvent);
 
   const {
     mode,
@@ -28,7 +35,13 @@ export default function App() {
     addPixel,
     submitPixels,
     clearPending,
-  } = useDrawing(callDraw, accountId);
+    handleDrawEvent,
+  } = useDrawing(callDraw, accountId, regionDataRef);
+
+  // Wire the callback ref to the actual handler
+  useEffect(() => {
+    drawEventCallbackRef.current = handleDrawEvent;
+  }, [handleDrawEvent]);
 
   const handleCanvasSize = useCallback((w: number, h: number) => {
     setCanvasSize({ w, h });

@@ -70,6 +70,8 @@ impl Board {
 
         for ((rx, ry), pixels) in &region_pixels {
             let mut blob = self.get_region(*rx, *ry).await;
+            let ts_key = valkey::pixel_ts_key(*rx, *ry);
+            let mut applied_ts: Vec<(String, f64)> = Vec::new();
 
             for &(lx, ly, r, g, b) in pixels {
                 let offset = pixel_offset(lx, ly);
@@ -77,14 +79,32 @@ impl Board {
 
                 // Ownership check
                 if !existing.is_empty() {
-                    let age = event.block_timestamp.saturating_sub(existing.timestamp_ns);
-                    if age < OWNERSHIP_DURATION_NS && existing.owner_id != owner_id {
-                        // Within ownership period and different owner - skip
-                        continue;
-                    }
-                    if age >= OWNERSHIP_DURATION_NS {
-                        // Pixel is permanent - skip
-                        continue;
+                    let member = format!("{lx},{ly}");
+                    let ts: Option<f64> = redis::cmd("ZSCORE")
+                        .arg(&ts_key)
+                        .arg(&member)
+                        .query_async(&mut self.valkey)
+                        .await
+                        .unwrap_or(None);
+
+                    match ts {
+                        None => {
+                            // No timestamp found — pre-migration permanent pixel, skip
+                            continue;
+                        }
+                        Some(ts_f64) => {
+                            let ts_ns = ts_f64 as u64;
+                            let age = event.block_timestamp.saturating_sub(ts_ns);
+                            if age >= OWNERSHIP_DURATION_NS {
+                                // Pixel is permanent — skip
+                                continue;
+                            }
+                            if existing.owner_id != owner_id {
+                                // Within ownership period and different owner — skip
+                                continue;
+                            }
+                            // Same owner within ownership period — allow overwrite
+                        }
                     }
                 }
 
@@ -94,10 +114,10 @@ impl Board {
                     g,
                     b,
                     owner_id,
-                    timestamp_ns: event.block_timestamp,
                 };
                 new_pixel.encode(&mut blob[offset..offset + PIXEL_SIZE]);
 
+                applied_ts.push((format!("{lx},{ly}"), event.block_timestamp as f64));
                 applied.push(AppliedPixel {
                     x: *rx * REGION_SIZE + lx as i64,
                     y: *ry * REGION_SIZE + ly as i64,
@@ -105,6 +125,30 @@ impl Board {
                     g,
                     b,
                 });
+            }
+
+            // ZADD timestamps for applied pixels in this region
+            if !applied_ts.is_empty() {
+                let _: () = redis::cmd("ZADD")
+                    .arg(&ts_key)
+                    .arg(applied_ts.iter().flat_map(|(member, score)| {
+                        vec![score.to_string(), member.clone()]
+                    }).collect::<Vec<_>>())
+                    .query_async(&mut self.valkey)
+                    .await
+                    .unwrap_or_else(|e| {
+                        tracing::error!("Failed to ZADD pixel timestamps ({},{}): {}", rx, ry, e);
+                    });
+
+                // Trim timestamps older than 1 hour
+                let one_hour_ago = event.block_timestamp.saturating_sub(OWNERSHIP_DURATION_NS);
+                let _: () = self
+                    .valkey
+                    .zrembyscore(&ts_key, 0u64, one_hour_ago)
+                    .await
+                    .unwrap_or_else(|e| {
+                        tracing::error!("Failed to trim pixel timestamps ({},{}): {}", rx, ry, e);
+                    });
             }
 
             // Save back to cache and Valkey
@@ -135,6 +179,7 @@ impl Board {
     }
 
     /// Resolve an account_id to a u32 owner index, creating a new one if needed.
+    /// IDs start at 1; 0 is reserved as the "undrawn" sentinel.
     async fn resolve_owner_id(&mut self, account_id: &str) -> u32 {
         // Check if account already has an ID
         let existing: Option<u32> = self
@@ -147,12 +192,13 @@ impl Board {
             return id;
         }
 
-        // Assign a new ID by getting the current count
+        // Assign a new ID: hlen + 1 so IDs start at 1 (0 = undrawn sentinel)
         let new_id: u32 = self
             .valkey
-            .hlen(valkey::ACCOUNT_TO_ID)
+            .hlen::<_, u32>(valkey::ACCOUNT_TO_ID)
             .await
-            .unwrap_or(0);
+            .unwrap_or(0)
+            + 1;
 
         let _: () = self
             .valkey

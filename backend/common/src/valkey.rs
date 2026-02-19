@@ -25,3 +25,8 @@ pub fn region_key(rx: i64, ry: i64) -> String {
 pub fn region_meta_key(rx: i64, ry: i64) -> String {
     format!("region_meta:{rx}:{ry}")
 }
+
+/// Build the Valkey key for per-region pixel timestamp sorted set.
+pub fn pixel_ts_key(rx: i64, ry: i64) -> String {
+    format!("pixel_ts:{rx}:{ry}")
+}

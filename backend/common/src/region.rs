@@ -1,20 +1,20 @@
 /// Region size in pixels (128x128).
 pub const REGION_SIZE: i64 = 128;
 
-/// Per-pixel binary size: 3 (RGB) + 4 (owner_id u32) + 8 (timestamp_ns u64) = 15 bytes.
-pub const PIXEL_SIZE: usize = 15;
+/// Per-pixel binary size: 3 (RGB) + 3 (owner_id u24) = 6 bytes.
+/// Timestamps are stored in per-region Valkey sorted sets (`pixel_ts:{rx}:{ry}`).
+pub const PIXEL_SIZE: usize = 6;
 
-/// Total region blob size: 128 * 128 * 15 = 245,760 bytes.
+/// Total region blob size: 128 * 128 * 6 = 98,304 bytes.
 pub const REGION_BLOB_SIZE: usize = (REGION_SIZE as usize) * (REGION_SIZE as usize) * PIXEL_SIZE;
 
-/// A stored pixel with color, owner, and timestamp.
+/// A stored pixel with color and owner. owner_id=0 means undrawn.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Pixel {
     pub r: u8,
     pub g: u8,
     pub b: u8,
     pub owner_id: u32,
-    pub timestamp_ns: u64,
 }
 
 /// Compute which region a world-space pixel coordinate falls in.
@@ -36,30 +36,31 @@ pub fn pixel_offset(lx: usize, ly: usize) -> usize {
 }
 
 impl Pixel {
-    /// Encode a pixel into the 15-byte binary format.
+    /// Encode a pixel into the 6-byte binary format (3 RGB + 3 owner_id LE).
     pub fn encode(&self, buf: &mut [u8]) {
         debug_assert!(buf.len() >= PIXEL_SIZE);
+        let ob = self.owner_id.to_le_bytes();
         buf[0] = self.r;
         buf[1] = self.g;
         buf[2] = self.b;
-        buf[3..7].copy_from_slice(&self.owner_id.to_le_bytes());
-        buf[7..15].copy_from_slice(&self.timestamp_ns.to_le_bytes());
+        buf[3] = ob[0];
+        buf[4] = ob[1];
+        buf[5] = ob[2];
     }
 
-    /// Decode a pixel from the 15-byte binary format.
+    /// Decode a pixel from the 6-byte binary format.
     pub fn decode(buf: &[u8]) -> Self {
         debug_assert!(buf.len() >= PIXEL_SIZE);
         Self {
             r: buf[0],
             g: buf[1],
             b: buf[2],
-            owner_id: u32::from_le_bytes(buf[3..7].try_into().unwrap()),
-            timestamp_ns: u64::from_le_bytes(buf[7..15].try_into().unwrap()),
+            owner_id: u32::from_le_bytes([buf[3], buf[4], buf[5], 0]),
         }
     }
 
-    /// Whether this pixel has ever been drawn on.
+    /// Whether this pixel has ever been drawn on (owner_id == 0 means undrawn).
     pub fn is_empty(&self) -> bool {
-        self.timestamp_ns == 0
+        self.owner_id == 0
     }
 }
