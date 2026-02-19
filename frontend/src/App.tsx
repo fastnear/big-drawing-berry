@@ -102,6 +102,7 @@ export default function App() {
       <Minimap
         camera={camera}
         regionImages={regionImages}
+        pendingPixels={pendingPixels}
         canvasWidth={canvasSize.w}
         canvasHeight={canvasSize.h}
       />

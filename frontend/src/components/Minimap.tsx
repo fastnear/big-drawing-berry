@@ -5,6 +5,7 @@ import { REGION_SIZE } from "../lib/constants";
 interface Props {
   camera: Camera;
   regionImages: Map<string, ImageBitmap>;
+  pendingPixels: Array<{ x: number; y: number; color: string }>;
   canvasWidth: number;
   canvasHeight: number;
 }
@@ -14,6 +15,7 @@ const MINIMAP_SIZE = 160;
 export default function Minimap({
   camera,
   regionImages,
+  pendingPixels,
   canvasWidth,
   canvasHeight,
 }: Props) {
@@ -69,6 +71,14 @@ export default function Minimap({
       ctx.drawImage(img, sx, sy, sw, sh);
     }
 
+    // Draw pending pixels
+    for (const p of pendingPixels) {
+      const sx = offsetX + (p.x - minRx * REGION_SIZE) * scale;
+      const sy = offsetY + (p.y - minRy * REGION_SIZE) * scale;
+      ctx.fillStyle = `#${p.color}`;
+      ctx.fillRect(sx, sy, Math.max(scale, 1), Math.max(scale, 1));
+    }
+
     // Draw viewport indicator
     const halfW = canvasWidth / 2 / camera.zoom;
     const halfH = canvasHeight / 2 / camera.zoom;
@@ -81,7 +91,7 @@ export default function Minimap({
     ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
     ctx.lineWidth = 1.5;
     ctx.strokeRect(vpX, vpY, vpW, vpH);
-  }, [camera, regionImages, canvasWidth, canvasHeight]);
+  }, [camera, regionImages, pendingPixels, canvasWidth, canvasHeight]);
 
   return (
     <canvas
