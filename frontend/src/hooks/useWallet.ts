@@ -8,7 +8,10 @@ export function useWallet() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const connector = new NearConnector({ network: "mainnet" });
+    const connector = new NearConnector({
+      network: "mainnet",
+      signIn: { contractId: CONTRACT_ID, methodNames: ["draw"] },
+    });
     connectorRef.current = connector;
 
     connector.on("wallet:signIn", ({ accounts }) => {

@@ -1,6 +1,7 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import type { Camera } from "../lib/types";
 import { renderBoard } from "../lib/canvas-renderer";
+import { REGION_SIZE, PIXEL_SIZE } from "../lib/constants";
 import type { Mode } from "../hooks/useDrawing";
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
   regionImages: Map<string, ImageBitmap>;
   mode: Mode;
   pendingPixels: Array<{ x: number; y: number; color: string }>;
+  regionDataRef: React.RefObject<Map<string, ArrayBuffer>>;
   onPan: (dx: number, dy: number) => void;
   onZoomAt: (
     factor: number,
@@ -19,6 +21,7 @@ interface Props {
   onStartDrawing: () => void;
   onStopDrawing: () => void;
   onAddPixel: (worldX: number, worldY: number) => void;
+  onPickColor: (color: string) => void;
   onCanvasSize: (w: number, h: number) => void;
 }
 
@@ -27,11 +30,13 @@ export default function Board({
   regionImages,
   mode,
   pendingPixels,
+  regionDataRef,
   onPan,
   onZoomAt,
   onStartDrawing,
   onStopDrawing,
   onAddPixel,
+  onPickColor,
   onCanvasSize,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -103,9 +108,65 @@ export default function Board({
     [camera]
   );
 
+  // Alt key tracking for eyedropper cursor
+  const [altHeld, setAltHeld] = useState(false);
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => { if (e.key === "Alt") setAltHeld(true); };
+    const up = (e: KeyboardEvent) => { if (e.key === "Alt") setAltHeld(false); };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", () => setAltHeld(false));
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", () => setAltHeld(false));
+    };
+  }, []);
+
   // Mouse handlers
+  const pickColorAt = useCallback(
+    (screenX: number, screenY: number) => {
+      const { x, y } = screenToWorld(screenX, screenY);
+      const px = Math.floor(x);
+      const py = Math.floor(y);
+
+      // Check pending pixels first (last one wins, matching render order)
+      for (let i = pendingPixels.length - 1; i >= 0; i--) {
+        const p = pendingPixels[i];
+        if (p.x === px && p.y === py) {
+          onPickColor("#" + p.color);
+          return;
+        }
+      }
+
+      // Fall back to region data
+      const rx = Math.floor(px / REGION_SIZE);
+      const ry = Math.floor(py / REGION_SIZE);
+      const blob = regionDataRef.current?.get(`${rx}:${ry}`);
+      if (!blob) return;
+      const lx = ((px % REGION_SIZE) + REGION_SIZE) % REGION_SIZE;
+      const ly = ((py % REGION_SIZE) + REGION_SIZE) % REGION_SIZE;
+      const offset = (ly * REGION_SIZE + lx) * PIXEL_SIZE;
+      const view = new Uint8Array(blob);
+      const r = view[offset];
+      const g = view[offset + 1];
+      const b = view[offset + 2];
+      const hex =
+        "#" +
+        r.toString(16).padStart(2, "0") +
+        g.toString(16).padStart(2, "0") +
+        b.toString(16).padStart(2, "0");
+      onPickColor(hex);
+    },
+    [screenToWorld, pendingPixels, regionDataRef, onPickColor]
+  );
+
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
+      if (e.altKey && e.button === 0) {
+        pickColorAt(e.clientX, e.clientY);
+        return;
+      }
       if (mode === "move" || e.button === 1) {
         isPanningRef.current = true;
         lastMouseRef.current = { x: e.clientX, y: e.clientY };
@@ -115,7 +176,7 @@ export default function Board({
         onAddPixel(x, y);
       }
     },
-    [mode, screenToWorld, onStartDrawing, onAddPixel]
+    [mode, screenToWorld, onStartDrawing, onAddPixel, pickColorAt]
   );
 
   const handleMouseMove = useCallback(
@@ -141,7 +202,7 @@ export default function Board({
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
       e.preventDefault();
-      const factor = e.deltaY > 0 ? 0.9 : 1.1;
+      const factor = e.deltaY > 0 ? 0.99 : 1.01;
       const canvas = canvasRef.current;
       if (!canvas) return;
       const dpr = window.devicePixelRatio || 1;
@@ -228,7 +289,7 @@ export default function Board({
         position: "absolute",
         top: 0,
         left: 0,
-        cursor: mode === "move" ? "grab" : "crosshair",
+        cursor: altHeld ? "copy" : mode === "move" ? "grab" : "crosshair",
         touchAction: "none",
       }}
       onMouseDown={handleMouseDown}

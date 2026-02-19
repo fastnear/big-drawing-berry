@@ -10,6 +10,10 @@ interface Props {
   onSetColor: (color: string) => void;
   onSubmit: () => void;
   onClear: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 export default function Toolbar({
@@ -22,6 +26,10 @@ export default function Toolbar({
   onSetColor,
   onSubmit,
   onClear,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
 }: Props) {
   // Don't show drawing controls if not signed in or on mobile
   const isMobile =
@@ -62,6 +70,31 @@ export default function Toolbar({
             style={styles.colorPicker}
             title="Pick a color"
           />
+
+          <div style={styles.undoRedoSection}>
+            <button
+              style={{
+                ...styles.clearButton,
+                ...(canUndo ? {} : styles.disabledButton),
+              }}
+              onClick={onUndo}
+              disabled={!canUndo}
+              title="Undo (Ctrl+Z)"
+            >
+              Undo
+            </button>
+            <button
+              style={{
+                ...styles.clearButton,
+                ...(canRedo ? {} : styles.disabledButton),
+              }}
+              onClick={onRedo}
+              disabled={!canRedo}
+              title="Redo (Ctrl+Shift+Z)"
+            >
+              Redo
+            </button>
+          </div>
 
           {pendingCount > 0 && (
             <div style={styles.pendingSection}>
@@ -153,5 +186,13 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#aaa",
     fontSize: 13,
     cursor: "pointer",
+  },
+  undoRedoSection: {
+    display: "flex",
+    gap: 4,
+  },
+  disabledButton: {
+    opacity: 0.35,
+    cursor: "default",
   },
 };

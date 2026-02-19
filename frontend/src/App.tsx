@@ -36,6 +36,10 @@ export default function App() {
     submitPixels,
     clearPending,
     handleDrawEvent,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = useDrawing(callDraw, accountId, regionDataRef);
 
   // Wire the callback ref to the actual handler
@@ -54,11 +58,13 @@ export default function App() {
         regionImages={regionImages}
         mode={mode}
         pendingPixels={pendingPixels}
+        regionDataRef={regionDataRef}
         onPan={pan}
         onZoomAt={zoomAt}
         onStartDrawing={startDrawing}
         onStopDrawing={stopDrawing}
         onAddPixel={addPixel}
+        onPickColor={setColor}
         onCanvasSize={handleCanvasSize}
       />
 
@@ -79,6 +85,10 @@ export default function App() {
         onSetColor={setColor}
         onSubmit={submitPixels}
         onClear={clearPending}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
       />
 
       <Minimap

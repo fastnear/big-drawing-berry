@@ -1,11 +1,28 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { REGION_SIZE, PIXEL_SIZE } from "../lib/constants";
 import type { DrawEventWS } from "../lib/types";
 
 export type Mode = "move" | "draw";
 
+type Pixel = { x: number; y: number; color: string };
+type Stroke = Pixel[];
+
 /** One hour in milliseconds (for client-side ownership hint). */
 const OWNERSHIP_DURATION_MS = 3_600_000;
+
+/** Replay all strokes into a deduped pixel array (last write wins). */
+function derivePixels(strokes: Stroke[], currentStroke: Stroke): Pixel[] {
+  const map = new Map<string, Pixel>();
+  for (const stroke of strokes) {
+    for (const p of stroke) {
+      map.set(`${p.x},${p.y}`, p);
+    }
+  }
+  for (const p of currentStroke) {
+    map.set(`${p.x},${p.y}`, p);
+  }
+  return Array.from(map.values());
+}
 
 export function useDrawing(
   callDraw: (pixels: Array<{ x: number; y: number; color: string }>) => Promise<void>,
@@ -14,25 +31,41 @@ export function useDrawing(
 ) {
   const [mode, setMode] = useState<Mode>("move");
   const [color, setColor] = useState("#FF5733");
-  const [pendingPixels, setPendingPixels] = useState<
-    Array<{ x: number; y: number; color: string }>
-  >([]);
+  const [pendingPixels, setPendingPixels] = useState<Pixel[]>([]);
   const [isSending, setIsSending] = useState(false);
   const isDrawingRef = useRef(false);
+
+  // Stroke stacks
+  const strokesRef = useRef<Stroke[]>([]);
+  const redoStackRef = useRef<Stroke[]>([]);
+  const currentStrokeRef = useRef<Stroke>([]);
 
   // Track timestamps for pixels we own (client-side hint to avoid wasted transactions)
   const ownPixelTimestamps = useRef<Map<string, number>>(new Map());
 
   const colorHex = color.replace("#", "").toUpperCase();
 
+  const recomputePending = useCallback(() => {
+    setPendingPixels(
+      derivePixels(strokesRef.current, currentStrokeRef.current)
+    );
+  }, []);
+
   const startDrawing = useCallback(() => {
     if (mode !== "draw" || !accountId) return;
     isDrawingRef.current = true;
+    currentStrokeRef.current = [];
   }, [mode, accountId]);
 
   const stopDrawing = useCallback(() => {
     isDrawingRef.current = false;
-  }, []);
+    if (currentStrokeRef.current.length > 0) {
+      strokesRef.current = [...strokesRef.current, currentStrokeRef.current];
+      redoStackRef.current = [];
+      currentStrokeRef.current = [];
+      recomputePending();
+    }
+  }, [recomputePending]);
 
   /** Called from useBoard when a WebSocket draw event arrives. */
   const handleDrawEvent = useCallback(
@@ -83,20 +116,48 @@ export function useDrawing(
         }
       }
 
-      setPendingPixels((prev) => {
-        // Deduplicate
-        if (prev.some((p) => p.x === px && p.y === py)) return prev;
-        return [...prev, { x: px, y: py, color: colorHex }];
-      });
+      // Add to current stroke (recolor if same pixel already in this stroke)
+      const stroke = currentStrokeRef.current;
+      const idx = stroke.findIndex((p) => p.x === px && p.y === py);
+      if (idx !== -1) {
+        if (stroke[idx].color === colorHex) return;
+        stroke[idx] = { x: px, y: py, color: colorHex };
+      } else {
+        stroke.push({ x: px, y: py, color: colorHex });
+      }
+
+      recomputePending();
     },
-    [mode, accountId, colorHex, regionDataRef]
+    [mode, accountId, colorHex, regionDataRef, recomputePending]
   );
+
+  const undo = useCallback(() => {
+    if (strokesRef.current.length === 0) return;
+    const last = strokesRef.current[strokesRef.current.length - 1];
+    strokesRef.current = strokesRef.current.slice(0, -1);
+    redoStackRef.current = [...redoStackRef.current, last];
+    recomputePending();
+  }, [recomputePending]);
+
+  const redo = useCallback(() => {
+    if (redoStackRef.current.length === 0) return;
+    const last = redoStackRef.current[redoStackRef.current.length - 1];
+    redoStackRef.current = redoStackRef.current.slice(0, -1);
+    strokesRef.current = [...strokesRef.current, last];
+    recomputePending();
+  }, [recomputePending]);
+
+  const canUndo = strokesRef.current.length > 0;
+  const canRedo = redoStackRef.current.length > 0;
 
   const submitPixels = useCallback(async () => {
     if (pendingPixels.length === 0 || isSending) return;
     setIsSending(true);
     try {
       await callDraw(pendingPixels);
+      strokesRef.current = [];
+      redoStackRef.current = [];
+      currentStrokeRef.current = [];
       setPendingPixels([]);
     } catch (e) {
       console.error("Failed to submit pixels:", e);
@@ -106,8 +167,29 @@ export function useDrawing(
   }, [pendingPixels, isSending, callDraw]);
 
   const clearPending = useCallback(() => {
+    strokesRef.current = [];
+    redoStackRef.current = [];
+    currentStrokeRef.current = [];
     setPendingPixels([]);
   }, []);
+
+  // Keyboard shortcuts for undo/redo (only in draw mode)
+  useEffect(() => {
+    if (mode !== "draw") return;
+    const handler = (e: KeyboardEvent) => {
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (!ctrl) return;
+      if (e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if ((e.key === "z" && e.shiftKey) || e.key === "y") {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [mode, undo, redo]);
 
   return {
     mode,
@@ -122,5 +204,9 @@ export function useDrawing(
     submitPixels,
     clearPending,
     handleDrawEvent,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   };
 }
