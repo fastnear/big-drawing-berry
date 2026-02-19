@@ -6,6 +6,9 @@ use tokio::sync::{broadcast, RwLock};
 
 use crate::board::Board;
 
+/// Two hours in milliseconds (for trimming the WS catch-up sorted set).
+const CATCHUP_RETENTION_MS: u64 = 7_200_000;
+
 /// Consume draw events from the Valkey queue and apply them to the board.
 pub async fn run(
     mut con: redis::aio::MultiplexedConnection,
@@ -64,7 +67,7 @@ pub async fn run(
             let ws_event = serde_json::json!({
                 "type": "draw",
                 "signer": event.predecessor_id,
-                "block_timestamp": event.block_timestamp_ms,
+                "block_timestamp_ms": event.block_timestamp_ms,
                 "pixels": applied.iter().map(|p| {
                     serde_json::json!({
                         "x": p.x,
@@ -76,27 +79,24 @@ pub async fn run(
 
             let ws_json = ws_event.to_string();
 
-            // Add to sorted set keyed by timestamp
-            let _: () = con
-                .zadd(valkey::DRAW_EVENTS_ZSET, &ws_json, event.block_timestamp_ms as f64)
-                .await
-                .unwrap_or_default();
-
-            // Trim events older than 2 hours
-            let two_hours_ago = event.block_timestamp_ms.saturating_sub(7_200_000_000_000);
-            let _: () = con
-                .zrembyscore(valkey::DRAW_EVENTS_ZSET, 0u64, two_hours_ago)
+            // ZADD + trim + LREM in a single pipeline
+            let two_hours_ago = event.block_timestamp_ms.saturating_sub(CATCHUP_RETENTION_MS);
+            let _: () = redis::pipe()
+                .zadd(valkey::DRAW_EVENTS_ZSET, &ws_json, event.block_timestamp_ms as f64).ignore()
+                .zrembyscore(valkey::DRAW_EVENTS_ZSET, 0u64, two_hours_ago).ignore()
+                .lrem(valkey::PROCESSING_QUEUE, 1, &event_json).ignore()
+                .query_async(&mut con)
                 .await
                 .unwrap_or_default();
 
             // Broadcast to WebSocket subscribers
             let _ = broadcast_tx.send(ws_json);
+        } else {
+            // Remove from processing queue after successful processing
+            let _: () = con
+                .lrem(valkey::PROCESSING_QUEUE, 1, &event_json)
+                .await
+                .unwrap_or_default();
         }
-
-        // Remove from processing queue after successful processing
-        let _: () = con
-            .lrem(valkey::PROCESSING_QUEUE, 1, &event_json)
-            .await
-            .unwrap_or_default();
     }
 }

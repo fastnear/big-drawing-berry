@@ -127,51 +127,36 @@ impl Board {
                 });
             }
 
-            // ZADD timestamps for applied pixels in this region
+            // Save back to cache
+            self.cache.put((*rx, *ry), blob.clone());
+
+            // Pipeline all writes for this region: ZADD + trim + SET + HSET
+            let mut pipe = redis::pipe();
+
             if !applied_ts.is_empty() {
-                let _: () = redis::cmd("ZADD")
+                pipe.cmd("ZADD")
                     .arg(&ts_key)
                     .arg(applied_ts.iter().flat_map(|(member, score)| {
                         vec![score.to_string(), member.clone()]
                     }).collect::<Vec<_>>())
-                    .query_async(&mut self.valkey)
-                    .await
-                    .unwrap_or_else(|e| {
-                        tracing::error!("Failed to ZADD pixel timestamps ({},{}): {}", rx, ry, e);
-                    });
+                    .ignore();
 
-                // Trim timestamps older than 1 hour
                 let one_hour_ago = event.block_timestamp_ms.saturating_sub(OWNERSHIP_DURATION_MS);
-                let _: () = self
-                    .valkey
-                    .zrembyscore(&ts_key, 0u64, one_hour_ago)
-                    .await
-                    .unwrap_or_else(|e| {
-                        tracing::error!("Failed to trim pixel timestamps ({},{}): {}", rx, ry, e);
-                    });
+                pipe.zrembyscore(&ts_key, 0u64, one_hour_ago).ignore();
             }
 
-            // Save back to cache and Valkey
-            self.cache.put((*rx, *ry), blob.clone());
-            let _: () = self
-                .valkey
-                .set(valkey::region_key(*rx, *ry), blob)
-                .await
-                .unwrap_or_else(|e| {
-                    tracing::error!("Failed to save region ({},{}): {}", rx, ry, e);
-                });
+            pipe.set(valkey::region_key(*rx, *ry), blob).ignore();
+            pipe.cmd("HSET")
+                .arg(valkey::region_meta_key(*rx, *ry))
+                .arg("last_updated")
+                .arg(event.block_timestamp_ms)
+                .ignore();
 
-            // Update region metadata
-            let _: () = self
-                .valkey
-                .hset(
-                    valkey::region_meta_key(*rx, *ry),
-                    "last_updated",
-                    event.block_timestamp_ms,
-                )
+            let _: () = pipe
+                .query_async(&mut self.valkey)
                 .await
                 .unwrap_or_else(|e| {
-                    tracing::error!("Failed to update region meta ({},{}): {}", rx, ry, e);
+                    tracing::error!("Failed to write region ({},{}): {}", rx, ry, e);
                 });
         }
 
@@ -200,20 +185,13 @@ impl Board {
             .unwrap_or(0)
             + 1;
 
-        let _: () = self
-            .valkey
-            .hset(valkey::ACCOUNT_TO_ID, account_id, new_id)
+        let _: () = redis::pipe()
+            .hset(valkey::ACCOUNT_TO_ID, account_id, new_id).ignore()
+            .hset(valkey::ID_TO_ACCOUNT, new_id, account_id).ignore()
+            .query_async(&mut self.valkey)
             .await
             .unwrap_or_else(|e| {
-                tracing::error!("Failed to set account_to_id for {}: {}", account_id, e);
-            });
-
-        let _: () = self
-            .valkey
-            .hset(valkey::ID_TO_ACCOUNT, new_id, account_id)
-            .await
-            .unwrap_or_else(|e| {
-                tracing::error!("Failed to set id_to_account for {}: {}", new_id, e);
+                tracing::error!("Failed to set owner mappings for {}: {}", account_id, e);
             });
 
         new_id

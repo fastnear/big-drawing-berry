@@ -13,7 +13,7 @@ export interface DrawPixel {
 export interface DrawEventWS {
   type: "draw";
   signer: string;
-  block_timestamp: number;
+  block_timestamp_ms: number;
   pixels: DrawPixel[];
 }
 

@@ -62,7 +62,7 @@ async fn handle_client_message(
     };
 
     if msg.get("type").and_then(|t| t.as_str()) == Some("catch_up") {
-        if let Some(since) = msg.get("since_timestamp").and_then(|t| t.as_f64()) {
+        if let Some(since) = msg.get("since_timestamp_ms").and_then(|t| t.as_f64()) {
             let since_ts = since as u64;
             let events: Vec<String> = valkey
                 .clone()

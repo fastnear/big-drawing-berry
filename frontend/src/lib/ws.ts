@@ -21,7 +21,7 @@ export class WebSocketClient {
         this.ws!.send(
           JSON.stringify({
             type: "catch_up",
-            since_timestamp: this.lastTimestamp,
+            since_timestamp_ms: this.lastTimestamp,
           })
         );
       }
@@ -31,7 +31,7 @@ export class WebSocketClient {
       try {
         const event: DrawEventWS = JSON.parse(e.data);
         if (event.type === "draw") {
-          this.lastTimestamp = Math.max(this.lastTimestamp, event.block_timestamp);
+          this.lastTimestamp = Math.max(this.lastTimestamp, event.block_timestamp_ms);
           for (const handler of this.handlers) {
             handler(event);
           }
