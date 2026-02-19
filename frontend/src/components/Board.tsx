@@ -187,7 +187,8 @@ export default function Board({
         pickColorAt(e.clientX, e.clientY);
         return;
       }
-      if (mode === "move" || e.button === 1) {
+      const modifierHeld = e.metaKey || e.ctrlKey;
+      if (mode === "move" || e.button === 1 || (mode === "draw" && modifierHeld)) {
         isPanningRef.current = true;
         lastMouseRef.current = { x: e.clientX, y: e.clientY };
       } else if (mode === "draw" && e.button === 0) {
