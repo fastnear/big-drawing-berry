@@ -5,8 +5,8 @@ use lru::LruCache;
 use redis::AsyncCommands;
 use std::num::NonZero;
 
-/// One hour in nanoseconds.
-const OWNERSHIP_DURATION_NS: u64 = 3_600_000_000_000;
+/// One hour in milliseconds.
+const OWNERSHIP_DURATION_MS: u64 = 3_600_000;
 
 pub struct Board {
     /// LRU cache of region blobs keyed by (rx, ry).
@@ -48,7 +48,7 @@ impl Board {
     /// Apply a draw event to the board, enforcing ownership rules.
     /// Returns the list of pixels that were actually applied (for broadcasting).
     pub async fn apply_event(&mut self, event: &DrawEvent) -> Vec<AppliedPixel> {
-        let owner_id = self.resolve_owner_id(&event.signer_id).await;
+        let owner_id = self.resolve_owner_id(&event.predecessor_id).await;
         let mut applied = Vec::new();
 
         // Group pixels by region
@@ -94,8 +94,8 @@ impl Board {
                         }
                         Some(ts_f64) => {
                             let ts_ns = ts_f64 as u64;
-                            let age = event.block_timestamp.saturating_sub(ts_ns);
-                            if age >= OWNERSHIP_DURATION_NS {
+                            let age = event.block_timestamp_ms.saturating_sub(ts_ns);
+                            if age >= OWNERSHIP_DURATION_MS {
                                 // Pixel is permanent — skip
                                 continue;
                             }
@@ -117,7 +117,7 @@ impl Board {
                 };
                 new_pixel.encode(&mut blob[offset..offset + PIXEL_SIZE]);
 
-                applied_ts.push((format!("{lx},{ly}"), event.block_timestamp as f64));
+                applied_ts.push((format!("{lx},{ly}"), event.block_timestamp_ms as f64));
                 applied.push(AppliedPixel {
                     x: *rx * REGION_SIZE + lx as i32,
                     y: *ry * REGION_SIZE + ly as i32,
@@ -141,7 +141,7 @@ impl Board {
                     });
 
                 // Trim timestamps older than 1 hour
-                let one_hour_ago = event.block_timestamp.saturating_sub(OWNERSHIP_DURATION_NS);
+                let one_hour_ago = event.block_timestamp_ms.saturating_sub(OWNERSHIP_DURATION_MS);
                 let _: () = self
                     .valkey
                     .zrembyscore(&ts_key, 0u64, one_hour_ago)
@@ -167,7 +167,7 @@ impl Board {
                 .hset(
                     valkey::region_meta_key(*rx, *ry),
                     "last_updated",
-                    event.block_timestamp,
+                    event.block_timestamp_ms,
                 )
                 .await
                 .unwrap_or_else(|e| {

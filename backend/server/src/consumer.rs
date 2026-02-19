@@ -63,8 +63,8 @@ pub async fn run(
         if !applied.is_empty() {
             let ws_event = serde_json::json!({
                 "type": "draw",
-                "signer": event.signer_id,
-                "block_timestamp": event.block_timestamp,
+                "signer": event.predecessor_id,
+                "block_timestamp": event.block_timestamp_ms,
                 "pixels": applied.iter().map(|p| {
                     serde_json::json!({
                         "x": p.x,
@@ -78,12 +78,12 @@ pub async fn run(
 
             // Add to sorted set keyed by timestamp
             let _: () = con
-                .zadd(valkey::DRAW_EVENTS_ZSET, &ws_json, event.block_timestamp as f64)
+                .zadd(valkey::DRAW_EVENTS_ZSET, &ws_json, event.block_timestamp_ms as f64)
                 .await
                 .unwrap_or_default();
 
             // Trim events older than 2 hours
-            let two_hours_ago = event.block_timestamp.saturating_sub(7_200_000_000_000);
+            let two_hours_ago = event.block_timestamp_ms.saturating_sub(7_200_000_000_000);
             let _: () = con
                 .zrembyscore(valkey::DRAW_EVENTS_ZSET, 0u64, two_hours_ago)
                 .await

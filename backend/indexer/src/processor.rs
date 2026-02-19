@@ -24,6 +24,7 @@ pub async fn process_blocks(
 
         let block_height = block.block.header.height;
         let block_timestamp = block.block.header.timestamp_nanosec;
+        let block_timestamp_ms = block_timestamp / 1_000_000; // Convert to milliseconds
 
         let mut events = Vec::new();
 
@@ -37,13 +38,15 @@ pub async fn process_blocks(
                     continue;
                 }
 
-                // Extract signer_id and actions from the receipt
-                let (signer_id, actions) = match &receipt.receipt {
+                // Extract predecessor_id and actions from the receipt
+                let actions = match &receipt.receipt {
                     ReceiptEnumView::Action {
-                        signer_id, actions, ..
-                    } => (signer_id.to_string(), actions),
+                        actions, ..
+                    } => actions,
                     _ => continue,
                 };
+
+                let predecessor_id = receipt.predecessor_id.to_string();
 
                 // Find "draw" function calls
                 for action in actions {
@@ -67,9 +70,9 @@ pub async fn process_blocks(
 
                                 if !valid_pixels.is_empty() {
                                     events.push(DrawEvent {
-                                        signer_id: signer_id.clone(),
+                                        predecessor_id: predecessor_id.clone(),
                                         block_height,
-                                        block_timestamp,
+                                        block_timestamp_ms,
                                         pixels: valid_pixels,
                                     });
                                 }

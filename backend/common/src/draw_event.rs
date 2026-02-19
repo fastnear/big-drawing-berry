@@ -18,9 +18,9 @@ pub struct DrawArgs {
 /// A fully resolved draw event with signer and block metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DrawEvent {
-    pub signer_id: String,
+    pub predecessor_id: String,
     pub block_height: u64,
-    pub block_timestamp: u64,
+    pub block_timestamp_ms: u64,
     pub pixels: Vec<DrawPixel>,
 }
 
