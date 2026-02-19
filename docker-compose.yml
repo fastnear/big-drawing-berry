@@ -1,0 +1,9 @@
+services:
+  valkey:
+    image: valkey/valkey:8
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./valkey-data:/data
+      - ./valkey.conf:/usr/local/etc/valkey/valkey.conf
+    command: valkey-server /usr/local/etc/valkey/valkey.conf
