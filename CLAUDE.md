@@ -96,5 +96,6 @@ Each NEAR account gets a u32 index assigned on first draw (starting at 1; 0 is r
 `REGION_SIZE=128` and `PIXEL_SIZE=6` are defined in both `backend/common/src/region.rs` and `frontend/src/lib/constants.ts`. These must be kept in sync manually.
 
 ## Environment Variables
+- `CONTRACT_ID` — NEAR contract account (default: `berryfast.near`), used by indexer
 - `VALKEY_URL` — Valkey connection (default: `redis://127.0.0.1:6379`), used by both indexer and server
 - `LISTEN_ADDR` — Server listen address (default: `0.0.0.0:3000`)

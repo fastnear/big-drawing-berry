@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { MIN_ZOOM, MAX_ZOOM } from "../lib/constants";
+import { MIN_ZOOM, MAX_ZOOM, DEFAULT_ZOOM } from "../lib/constants";
 import type { Camera } from "../lib/types";
 
 function parseHash(): Camera {
@@ -13,7 +13,7 @@ function parseHash(): Camera {
       return { x, y, zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom)) };
     }
   }
-  return { x: 0, y: 0, zoom: 4 };
+  return { x: 0, y: 0, zoom: DEFAULT_ZOOM };
 }
 
 function updateHash(camera: Camera) {

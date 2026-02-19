@@ -6,7 +6,8 @@ pub struct Contract {}
 
 #[near]
 impl Contract {
-    pub fn draw(&self) {
+    #[payable]
+    pub fn draw(&mut self) {
         // Minimal contract: accepts any args, does nothing.
         // The indexer reads the transaction args directly from the chain.
     }

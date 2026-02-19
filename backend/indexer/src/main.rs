@@ -6,8 +6,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
-const CONTRACT_ACCOUNT: &str = "berryfast.near";
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
@@ -17,6 +15,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
+    let contract_account = std::env::var("CONTRACT_ID").unwrap_or_else(|_| "berryfast.near".into());
     let valkey_url = std::env::var("VALKEY_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into());
     let client = redis::Client::open(valkey_url)?;
     let mut con = client.get_multiplexed_async_connection().await?;
@@ -28,7 +27,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(
         "Starting indexer from block {:?} for contract {}",
         start_block,
-        CONTRACT_ACCOUNT
+        &contract_account
     );
 
     let is_running = Arc::new(AtomicBool::new(true));
@@ -56,7 +55,7 @@ async fn main() -> anyhow::Result<()> {
         start_fetcher(config, blocks_tx, fetcher_running).await;
     });
 
-    processor::process_blocks(blocks_rx, con, is_running.clone(), CONTRACT_ACCOUNT).await;
+    processor::process_blocks(blocks_rx, con, is_running.clone(), &contract_account).await;
 
     fetcher_handle.abort();
 
