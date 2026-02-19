@@ -72,6 +72,7 @@ impl Board {
             let mut blob = self.get_region(*rx, *ry).await;
             let ts_key = valkey::pixel_ts_key(*rx, *ry);
             let mut applied_ts: Vec<(String, f64)> = Vec::new();
+            let mut new_pixel_count: i64 = 0;
 
             for &(lx, ly, r, g, b) in pixels {
                 let offset = pixel_offset(lx, ly);
@@ -106,6 +107,11 @@ impl Board {
                             // Same owner within ownership period — allow overwrite
                         }
                     }
+                }
+
+                // Track newly claimed pixels (undrawn → drawn)
+                if existing.is_empty() {
+                    new_pixel_count += 1;
                 }
 
                 // Apply the pixel
@@ -151,6 +157,20 @@ impl Board {
                 .arg("last_updated")
                 .arg(event.block_timestamp_ms)
                 .ignore();
+
+            // Increment pixel count stats for newly claimed pixels
+            if new_pixel_count > 0 {
+                pipe.cmd("HINCRBY")
+                    .arg(valkey::ACCOUNT_PIXEL_COUNT)
+                    .arg(owner_id)
+                    .arg(new_pixel_count)
+                    .ignore();
+                pipe.cmd("HINCRBY")
+                    .arg(valkey::REGION_PIXEL_COUNT)
+                    .arg(format!("{}:{}", rx, ry))
+                    .arg(new_pixel_count)
+                    .ignore();
+            }
 
             let _: () = pipe
                 .query_async(&mut self.valkey)

@@ -23,6 +23,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/region/{rx}/{ry}", get(get_region))
         .route("/api/region/{rx}/{ry}/meta", get(get_region_meta))
         .route("/api/regions", get(get_regions_batch))
+        .route("/api/stats/accounts", get(get_account_stats))
+        .route("/api/stats/region/{rx}/{ry}", get(get_region_stats))
         .route("/api/health", get(health))
         .route("/ws", get(ws_upgrade))
         .with_state(state)
@@ -138,6 +140,52 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
         "last_processed_block": last_block,
         "queue_length": queue_len.unwrap_or(0)
     }))
+}
+
+async fn get_account_stats(State(state): State<AppState>) -> impl IntoResponse {
+    let mut valkey = state.valkey.clone();
+
+    // Get all owner_id → pixel_count pairs
+    let counts: Vec<(String, i64)> = valkey
+        .hgetall(common::valkey::ACCOUNT_PIXEL_COUNT)
+        .await
+        .unwrap_or_default();
+
+    // Get all id → account_id mappings
+    let id_to_account: Vec<(String, String)> = valkey
+        .hgetall(common::valkey::ID_TO_ACCOUNT)
+        .await
+        .unwrap_or_default();
+
+    let account_map: std::collections::HashMap<String, String> =
+        id_to_account.into_iter().collect();
+
+    let results: Vec<serde_json::Value> = counts
+        .into_iter()
+        .filter_map(|(owner_id, count)| {
+            let account_id = account_map.get(&owner_id)?;
+            Some(serde_json::json!({
+                "account_id": account_id,
+                "pixel_count": count,
+            }))
+        })
+        .collect();
+
+    axum::Json(results)
+}
+
+async fn get_region_stats(
+    State(state): State<AppState>,
+    Path((rx, ry)): Path<(i32, i32)>,
+) -> impl IntoResponse {
+    let count: i64 = state
+        .valkey
+        .clone()
+        .hget(common::valkey::REGION_PIXEL_COUNT, format!("{rx}:{ry}"))
+        .await
+        .unwrap_or(0);
+
+    axum::Json(serde_json::json!({ "count": count }))
 }
 
 async fn ws_upgrade(

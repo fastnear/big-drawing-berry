@@ -16,6 +16,12 @@ pub const ID_TO_ACCOUNT: &str = "id_to_account";
 /// Valkey sorted set for recent draw events (for WebSocket catch-up).
 pub const DRAW_EVENTS_ZSET: &str = "draw_events";
 
+/// Hash: owner_id (u32) → pixel count (i64). Tracks how many pixels each account owns.
+pub const ACCOUNT_PIXEL_COUNT: &str = "account_pixel_count";
+
+/// Hash: "rx:ry" → pixel count (i64). Tracks drawn pixels per region.
+pub const REGION_PIXEL_COUNT: &str = "region_pixel_count";
+
 /// Build the Valkey key for a region blob.
 pub fn region_key(rx: i32, ry: i32) -> String {
     format!("region:{rx}:{ry}")
