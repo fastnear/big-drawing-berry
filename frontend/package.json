@@ -9,8 +9,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@hot-labs/near-connect": "^0.9.0",
+    "@near-wallet-selector/core": "^10.1.4",
+    "@near-wallet-selector/here-wallet": "^10.1.4",
+    "@near-wallet-selector/hot-wallet": "^10.1.4",
+    "@near-wallet-selector/meteor-wallet": "^10.1.4",
+    "@near-wallet-selector/modal-ui": "^10.1.4",
+    "@near-wallet-selector/my-near-wallet": "^10.1.4",
+    "@near-wallet-selector/react-hook": "^10.1.4",
+    "buffer": "^6.0.3",
     "idb-keyval": "^6.2.1",
+    "near-api-js": "6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
