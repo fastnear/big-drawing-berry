@@ -11,7 +11,7 @@ import ZoomControls from "./components/ZoomControls";
 import type { DrawEventWS } from "./lib/types";
 
 export default function App() {
-  const { camera, pan, zoomAt, zoomIn, zoomOut } = useCamera();
+  const { camera, setCamera, pan, zoomAt, zoomIn, zoomOut } = useCamera();
   const { accountId, loading, signIn, signOut, callDraw } = useWallet();
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const [cursorCoords, setCursorCoords] = useState<{ x: number; y: number } | null>(null);
@@ -59,6 +59,10 @@ export default function App() {
   const handleCursorMove = useCallback((worldX: number, worldY: number) => {
     setCursorCoords({ x: Math.floor(worldX), y: Math.floor(worldY) });
   }, []);
+
+  const handleMinimapNavigate = useCallback((worldX: number, worldY: number) => {
+    setCamera((c) => ({ ...c, x: worldX, y: worldY }));
+  }, [setCamera]);
 
   return (
     <>
@@ -112,6 +116,8 @@ export default function App() {
         pendingPixels={pendingPixels}
         canvasWidth={canvasSize.w}
         canvasHeight={canvasSize.h}
+        onNavigate={handleMinimapNavigate}
+        onCursorMove={handleCursorMove}
       />
 
       <ZoomControls onZoomIn={zoomIn} onZoomOut={zoomOut} />
