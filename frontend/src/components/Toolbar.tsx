@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { HexColorPicker } from "react-colorful";
 import type { Mode } from "../hooks/useDrawing";
 
 const MAX_RECENT = 12;
@@ -40,6 +41,22 @@ export default function Toolbar({
 }: Props) {
   const [recentColors, setRecentColors] = useState<string[]>([]);
   const knownColors = useRef(new Set<string>());
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  // Close picker on click outside
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [pickerOpen]);
+
+  const togglePicker = useCallback(() => setPickerOpen((v) => !v), []);
 
   // Track colors as they appear in pending pixels (drawn or submitted)
   useEffect(() => {
@@ -108,13 +125,18 @@ export default function Toolbar({
 
       {mode === "draw" && (
         <>
-          <input
-            type="color"
-            value={color}
-            onChange={(e) => onSetColor(e.target.value)}
-            style={styles.colorPicker}
-            title="Pick a color"
-          />
+          <div style={{ position: "relative" }} ref={pickerRef}>
+            <button
+              style={{ ...styles.colorSwatch, background: color }}
+              onClick={togglePicker}
+              title="Pick a color"
+            />
+            {pickerOpen && (
+              <div style={styles.pickerPopover}>
+                <HexColorPicker color={color} onChange={onSetColor} />
+              </div>
+            )}
+          </div>
 
           <button
             style={{
@@ -214,14 +236,22 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#fff",
     border: "1px solid rgba(255,255,255,0.4)",
   },
-  colorPicker: {
+  colorSwatch: {
     width: 36,
     height: 36,
-    border: "none",
+    border: "2px solid rgba(255,255,255,0.3)",
     borderRadius: 8,
     cursor: "pointer",
-    background: "transparent",
     padding: 0,
+  },
+  pickerPopover: {
+    position: "absolute",
+    bottom: "calc(100% + 8px)",
+    left: "50%",
+    transform: "translateX(-50%)",
+    zIndex: 200,
+    borderRadius: 10,
+    boxShadow: "0 4px 20px rgba(0,0,0,0.6)",
   },
   pendingSection: {
     display: "flex",
