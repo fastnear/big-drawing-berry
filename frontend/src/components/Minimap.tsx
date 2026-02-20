@@ -8,6 +8,7 @@ interface Props {
   pendingPixels: Array<{ x: number; y: number; color: string }>;
   canvasWidth: number;
   canvasHeight: number;
+  openRegionsRef: React.RefObject<Set<string>>;
   onNavigate: (worldX: number, worldY: number) => void;
   onCursorMove?: (worldX: number, worldY: number) => void;
 }
@@ -20,6 +21,7 @@ export default function Minimap({
   pendingPixels,
   canvasWidth,
   canvasHeight,
+  openRegionsRef,
   onNavigate,
   onCursorMove,
 }: Props) {
@@ -34,8 +36,8 @@ export default function Minimap({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Clear
-    ctx.fillStyle = "#111";
+    // Fill entire canvas with locked-region gray
+    ctx.fillStyle = "#2E2E2E";
     ctx.fillRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
 
     if (regionImages.size === 0) return;
@@ -67,6 +69,22 @@ export default function Minimap({
 
     ctx.imageSmoothingEnabled = true;
 
+    // Fill open regions with black background first
+    const openRegions = openRegionsRef.current;
+    if (openRegions) {
+      for (const key of openRegions) {
+        const [rxStr, ryStr] = key.split(":");
+        const rx = parseInt(rxStr);
+        const ry = parseInt(ryStr);
+        if (rx < minRx || rx > maxRx || ry < minRy || ry > maxRy) continue;
+        const sx = offsetX + (rx - minRx) * REGION_SIZE * scale;
+        const sy = offsetY + (ry - minRy) * REGION_SIZE * scale;
+        ctx.fillStyle = "#111";
+        ctx.fillRect(sx, sy, REGION_SIZE * scale, REGION_SIZE * scale);
+      }
+    }
+
+    // Draw region images
     for (const [key, img] of regionImages) {
       const [rxStr, ryStr] = key.split(":");
       const rx = parseInt(rxStr);
@@ -78,6 +96,21 @@ export default function Minimap({
       const sh = REGION_SIZE * scale;
 
       ctx.drawImage(img, sx, sy, sw, sh);
+    }
+
+    // Tint closed regions that have images (so their content appears muted)
+    if (openRegions) {
+      for (const key of regionImages.keys()) {
+        if (!openRegions.has(key)) {
+          const [rxStr, ryStr] = key.split(":");
+          const rx = parseInt(rxStr);
+          const ry = parseInt(ryStr);
+          const sx = offsetX + (rx - minRx) * REGION_SIZE * scale;
+          const sy = offsetY + (ry - minRy) * REGION_SIZE * scale;
+          ctx.fillStyle = "rgba(46, 46, 46, 0.7)";
+          ctx.fillRect(sx, sy, REGION_SIZE * scale, REGION_SIZE * scale);
+        }
+      }
     }
 
     // Draw pending pixels
@@ -100,7 +133,7 @@ export default function Minimap({
     ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
     ctx.lineWidth = 1.5;
     ctx.strokeRect(vpX, vpY, vpW, vpH);
-  }, [camera, regionImages, pendingPixels, canvasWidth, canvasHeight]);
+  }, [camera, regionImages, pendingPixels, canvasWidth, canvasHeight, openRegionsRef]);
 
   const minimapToWorld = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current;

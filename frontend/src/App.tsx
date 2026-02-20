@@ -116,6 +116,7 @@ export default function App() {
         pendingPixels={pendingPixels}
         canvasWidth={canvasSize.w}
         canvasHeight={canvasSize.h}
+        openRegionsRef={openRegionsRef}
         onNavigate={handleMinimapNavigate}
         onCursorMove={handleCursorMove}
       />
