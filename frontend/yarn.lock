@@ -536,7 +536,7 @@
     "@near-js/crypto" "2.3.0"
     "@near-js/types" "2.3.0"
 
-"@near-js/keystores@2.5.1":
+"@near-js/keystores@2.5.1", "@near-js/keystores@^2.3.0":
   version "2.5.1"
   resolved "https://registry.yarnpkg.com/@near-js/keystores/-/keystores-2.5.1.tgz#41d452926f551cdc64fe3c19a56a5915885b1f45"
   integrity sha512-UlP3GXeDzRyUlL3qKZUkwSwbABDarhOqRRR0vcMBOOu+063GDULGio9GTWDvKDDi11nmfbhOzbiY5vXEW4jR8g==
@@ -776,6 +776,21 @@
     "@hot-wallet/sdk" "1.0.8"
     "@near-wallet-selector/core" "10.1.4"
 
+"@near-wallet-selector/intear-wallet@^10.1.4":
+  version "10.1.4"
+  resolved "https://registry.yarnpkg.com/@near-wallet-selector/intear-wallet/-/intear-wallet-10.1.4.tgz#910e43c585e2073fa200e25951bd3e355e4ca8e2"
+  integrity sha512-E0Z0IRoSbgz2K4mYOQPmjBN0XSPz6BYHI1tb9APcU7XKUnddu9knzuq9BN6fYp8hykC49DN2ns2aJKB8sQcNMw==
+  dependencies:
+    "@near-js/crypto" "^2.3.0"
+    "@near-js/keystores" "^2.3.0"
+    "@near-js/providers" "^2.3.0"
+    "@near-js/transactions" "^2.3.0"
+    "@near-js/types" "^2.3.0"
+    "@near-js/utils" "^2.3.0"
+    "@near-wallet-selector/core" "10.1.4"
+    "@near-wallet-selector/wallet-utils" "10.1.4"
+    js-sha256 "^0.9.0"
+
 "@near-wallet-selector/meteor-wallet@^10.1.4":
   version "10.1.4"
   resolved "https://registry.yarnpkg.com/@near-wallet-selector/meteor-wallet/-/meteor-wallet-10.1.4.tgz#10290994dd6042a8cc5df1ebfc0a6768bac2090c"
@@ -821,6 +836,20 @@
     "@near-wallet-selector/core" "10.1.4"
     "@near-wallet-selector/modal-ui" "10.1.4"
     react "18.3.1"
+
+"@near-wallet-selector/wallet-utils@10.1.4":
+  version "10.1.4"
+  resolved "https://registry.yarnpkg.com/@near-wallet-selector/wallet-utils/-/wallet-utils-10.1.4.tgz#317c6c040d6e0d38f5103e3cba60179afd2168be"
+  integrity sha512-mgFHtMMVv7r8L315WyrazZ13VFQUYtFlM0ZhnK16yxrZnsNP42y3xPTpQavt6euLKmjcDC+beXWWZGTHDEPX4A==
+  dependencies:
+    "@near-js/crypto" "^2.3.0"
+    "@near-js/providers" "^2.3.0"
+    "@near-js/signers" "^2.3.0"
+    "@near-js/transactions" "^2.3.0"
+    "@near-js/types" "^2.3.0"
+    "@near-js/utils" "^2.3.0"
+    "@near-wallet-selector/core" "10.1.4"
+    js-sha256 "^0.9.0"
 
 "@noble/curves@1.8.1":
   version "1.8.1"
@@ -1654,7 +1683,7 @@ jayson@^4.1.1:
     uuid "^8.3.2"
     ws "^7.5.10"
 
-js-sha256@0.9.0:
+js-sha256@0.9.0, js-sha256@^0.9.0:
   version "0.9.0"
   resolved "https://registry.yarnpkg.com/js-sha256/-/js-sha256-0.9.0.tgz#0b89ac166583e91ef9123644bd3c5334ce9d0966"
   integrity sha512-sga3MHh9sgQN2+pJ9VYZ+1LPwXOxuBJBA5nrR5/ofPfuiJBE2hnjsaN8se8JznOmGLN2p49Pe5U/ttafcs/apA==

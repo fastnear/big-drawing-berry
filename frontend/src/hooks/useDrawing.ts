@@ -16,6 +16,27 @@ const FILL_LIMIT = 420;
 /** Sentinel for undrawn (unowned) pixels — distinct from drawn black "000000". */
 const UNDRAWN = "UNDRAWN";
 
+/** Derive a hex color from a string, with constrained brightness. */
+function colorFromAccount(accountId: string): string {
+  let hash = 0;
+  for (let i = 0; i < accountId.length; i++) {
+    hash = ((hash << 5) - hash + accountId.charCodeAt(i)) | 0;
+  }
+  const hue = ((hash >>> 0) % 360);
+  const sat = 60 + ((hash >>> 8) % 25);     // 60-84%
+  const light = 45 + ((hash >>> 16) % 20);   // 45-64%
+
+  // HSL → hex
+  const s = sat / 100, l = light / 100;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => {
+    const k = (n + hue / 30) % 12;
+    const c = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    return Math.round(255 * c).toString(16).padStart(2, "0");
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
+
 /** Read the effective color for a pixel coordinate.
  *  Checks pending map first (last write wins), then falls back to region data.
  *  Returns UNDRAWN for unowned pixels, null if region data not loaded. */
@@ -74,7 +95,17 @@ export function useDrawing(
   openRegionsRef: React.RefObject<Set<string>>
 ) {
   const [mode, setMode] = useState<Mode>("move");
-  const [color, setColor] = useState("#FF5733");
+  const [color, setColor] = useState(() =>
+    accountId ? colorFromAccount(accountId) : "#FF5733"
+  );
+  const hasSetAccountColor = useRef(false);
+
+  useEffect(() => {
+    if (accountId && !hasSetAccountColor.current) {
+      hasSetAccountColor.current = true;
+      setColor(colorFromAccount(accountId));
+    }
+  }, [accountId]);
   const [fillMode, setFillMode] = useState(false);
   const [fillError, setFillError] = useState<string | null>(null);
   const fillErrorTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
