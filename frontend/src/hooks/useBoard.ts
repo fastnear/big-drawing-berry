@@ -122,6 +122,7 @@ export function useBoard(
 
     for (const { rx, ry } of visible) {
       const key = `${rx}:${ry}`;
+      if (!openRegionsRef.current.has(key)) continue;
       if (regionDataRef.current.has(key) || fetchingRef.current.has(key)) continue;
       toFetch.push({ rx, ry, key });
     }

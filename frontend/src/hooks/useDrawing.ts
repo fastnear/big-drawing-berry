@@ -191,25 +191,71 @@ export function useDrawing(
   const doSubmit = useCallback(async () => {
     const pixels = derivePixels(strokesRef.current, []);
     if (pixels.length === 0 || isSendingRef.current) return;
-    const strokeCount = strokesRef.current.length;
+
+    // Snapshot submitted strokes (by reference) for undo detection
+    const submittedStrokes = [...strokesRef.current];
+
+    // Capture original on-chain colors for undo recovery
+    const originals = new Map<string, string>();
+    const regionData = regionDataRef.current;
+    if (regionData) {
+      for (const p of pixels) {
+        const color = getPixelColor(p.x, p.y, new Map(), regionData);
+        if (color !== null) {
+          originals.set(`${p.x},${p.y}`, color === UNDRAWN ? "000000" : color);
+        }
+      }
+    }
+
     isSendingRef.current = true;
     setIsSending(true);
+    let success = false;
     try {
       await callDraw(pixels);
+      success = true;
       submittedPixelsRef.current = [...submittedPixelsRef.current, ...pixels];
-      strokesRef.current = strokesRef.current.slice(strokeCount);
+
+      // Detect strokes undone during in-flight TX
+      const currentStrokeSet = new Set(strokesRef.current);
+      const undoneStrokes = submittedStrokes.filter(s => !currentStrokeSet.has(s));
+
+      // Remove submitted strokes, keep any added during TX
+      const submittedSet = new Set(submittedStrokes);
+      strokesRef.current = strokesRef.current.filter(s => !submittedSet.has(s));
       redoStackRef.current = [];
+
+      // Create recovery stroke for undone pixels
+      if (undoneStrokes.length > 0 && originals.size > 0) {
+        const remainingPixelKeys = new Set(
+          derivePixels(strokesRef.current, currentStrokeRef.current)
+            .map(p => `${p.x},${p.y}`)
+        );
+        const recoveryMap = new Map<string, Pixel>();
+        for (const stroke of undoneStrokes) {
+          for (const p of stroke) {
+            const key = `${p.x},${p.y}`;
+            if (remainingPixelKeys.has(key)) continue;
+            const originalColor = originals.get(key);
+            if (originalColor) {
+              recoveryMap.set(key, { x: p.x, y: p.y, color: originalColor });
+            }
+          }
+        }
+        const recoveryStroke = Array.from(recoveryMap.values());
+        if (recoveryStroke.length > 0) {
+          strokesRef.current = [...strokesRef.current, recoveryStroke];
+        }
+      }
+
       recomputePending();
     } catch (e) {
       console.error("Failed to submit pixels:", e);
     } finally {
       isSendingRef.current = false;
       setIsSending(false);
-      if (needsResubmitRef.current) {
+      if (needsResubmitRef.current || (success && strokesRef.current.length > 0)) {
         needsResubmitRef.current = false;
-        if (strokesRef.current.length > 0) {
-          scheduleAutoSubmit();
-        }
+        scheduleAutoSubmit();
       }
     }
   }, [callDraw, recomputePending, scheduleAutoSubmit]);
