@@ -6,6 +6,25 @@ import { getCachedRegion, setCachedRegion } from "../lib/region-cache";
 import { decodeRegionToImageData, getVisibleRegions } from "../lib/canvas-renderer";
 import { WebSocketClient } from "../lib/ws";
 
+const OPEN_REGIONS_CACHE_KEY = "open_regions";
+
+function loadCachedOpenRegions(): Set<string> {
+  try {
+    const raw = localStorage.getItem(OPEN_REGIONS_CACHE_KEY);
+    if (raw) {
+      const arr: string[] = JSON.parse(raw);
+      if (arr.length > 0) return new Set(arr);
+    }
+  } catch {}
+  return new Set(["0:0"]);
+}
+
+function saveCachedOpenRegions(regions: Set<string>) {
+  try {
+    localStorage.setItem(OPEN_REGIONS_CACHE_KEY, JSON.stringify([...regions]));
+  } catch {}
+}
+
 /**
  * Manages region data fetching, caching, and live WebSocket updates.
  * Returns a Map of region keys to ImageBitmaps for rendering, plus regionDataRef.
@@ -22,7 +41,7 @@ export function useBoard(
   const regionMetaRef = useRef<Map<string, number>>(new Map()); // key -> lastUpdated
   const fetchingRef = useRef<Set<string>>(new Set());
   const wsRef = useRef<WebSocketClient | null>(null);
-  const openRegionsRef = useRef<Set<string>>(new Set(["0:0"]));
+  const openRegionsRef = useRef<Set<string>>(loadCachedOpenRegions());
   const [openRegionsVersion, setOpenRegionsVersion] = useState(0);
 
   // Connect WebSocket + fetch open regions
@@ -40,6 +59,7 @@ export function useBoard(
       for (const r of event.regions) {
         openRegionsRef.current.add(`${r.rx}:${r.ry}`);
       }
+      saveCachedOpenRegions(openRegionsRef.current);
       setOpenRegionsVersion((v) => v + 1);
     });
 
@@ -48,6 +68,7 @@ export function useBoard(
       for (const r of regions) {
         openRegionsRef.current.add(`${r.rx}:${r.ry}`);
       }
+      saveCachedOpenRegions(openRegionsRef.current);
       setOpenRegionsVersion((v) => v + 1);
     }).catch((e) => console.error("Failed to fetch open regions:", e));
 
