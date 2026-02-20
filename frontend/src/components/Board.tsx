@@ -236,14 +236,7 @@ export default function Board({
     const handler = (e: WheelEvent) => {
       e.preventDefault();
       const factor = e.deltaY > 0 ? 0.99 : 1.01;
-      const dpr = window.devicePixelRatio || 1;
-      onZoomAt(
-        factor,
-        e.clientX * dpr,
-        e.clientY * dpr,
-        canvas.width,
-        canvas.height
-      );
+      onZoomAt(factor, e.clientX, e.clientY, canvas.clientWidth, canvas.clientHeight);
     };
     canvas.addEventListener("wheel", handler, { passive: false });
     return () => canvas.removeEventListener("wheel", handler);
@@ -295,8 +288,7 @@ export default function Board({
           const factor = dist / prev.dist;
           const midX = (touches[0].x + touches[1].x) / 2;
           const midY = (touches[0].y + touches[1].y) / 2;
-          const dpr = window.devicePixelRatio || 1;
-          onZoomAt(factor, midX * dpr, midY * dpr, canvas.width, canvas.height);
+          onZoomAt(factor, midX, midY, canvas.clientWidth, canvas.clientHeight);
         }
       }
 
