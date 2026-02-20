@@ -95,7 +95,7 @@ export default function App() {
       <Toolbar
         mode={mode}
         color={color}
-        pendingCount={pendingPixels.length}
+        pendingPixels={pendingPixels}
         isSending={isSending}
         accountId={accountId}
         onSetMode={setMode}

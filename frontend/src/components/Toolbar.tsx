@@ -1,9 +1,12 @@
+import { useState, useEffect, useRef } from "react";
 import type { Mode } from "../hooks/useDrawing";
+
+const MAX_RECENT = 12;
 
 interface Props {
   mode: Mode;
   color: string;
-  pendingCount: number;
+  pendingPixels: Array<{ x: number; y: number; color: string }>;
   isSending: boolean;
   accountId: string | null;
   onSetMode: (mode: Mode) => void;
@@ -21,7 +24,7 @@ interface Props {
 export default function Toolbar({
   mode,
   color,
-  pendingCount,
+  pendingPixels,
   isSending,
   accountId,
   onSetMode,
@@ -35,12 +38,50 @@ export default function Toolbar({
   fillMode,
   onSetFillMode,
 }: Props) {
+  const [recentColors, setRecentColors] = useState<string[]>([]);
+  const knownColors = useRef(new Set<string>());
+
+  // Track colors as they appear in pending pixels (drawn or submitted)
+  useEffect(() => {
+    const newColors: string[] = [];
+    for (const p of pendingPixels) {
+      const c = "#" + p.color;
+      if (!knownColors.current.has(c)) {
+        knownColors.current.add(c);
+        newColors.push(c);
+      }
+    }
+    if (newColors.length > 0) {
+      setRecentColors((prev) => {
+        const filtered = prev.filter((c) => !newColors.includes(c));
+        return [...newColors, ...filtered].slice(0, MAX_RECENT);
+      });
+    }
+  }, [pendingPixels]);
+
   // Don't show drawing controls if not signed in or on mobile
   const isMobile =
     typeof window !== "undefined" && "ontouchstart" in window;
   if (!accountId || isMobile) return null;
 
   return (
+    <div style={styles.wrapper}>
+    {mode === "draw" && recentColors.length > 0 && (
+      <div style={styles.recentRow}>
+        {recentColors.map((c) => (
+          <button
+            key={c}
+            style={{
+              ...styles.swatch,
+              background: c,
+              ...(c.toUpperCase() === color.toUpperCase() ? styles.swatchActive : {}),
+            }}
+            onClick={() => onSetColor(c)}
+            title={c}
+          />
+        ))}
+      </div>
+    )}
     <div style={styles.container}>
       <div style={styles.modeToggle}>
         <button
@@ -111,9 +152,9 @@ export default function Toolbar({
             </button>
           </div>
 
-          {pendingCount > 0 && (
+          {pendingPixels.length > 0 && (
             <div style={styles.pendingSection}>
-              <span style={styles.pendingCount}>{pendingCount}px</span>
+              <span style={styles.pendingCount}>{pendingPixels.length}px</span>
               <button
                 style={styles.submitButton}
                 onClick={onSubmit}
@@ -129,16 +170,24 @@ export default function Toolbar({
         </>
       )}
     </div>
+
+    </div>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: {
+  wrapper: {
     position: "absolute",
     bottom: 24,
     left: "50%",
     transform: "translateX(-50%)",
     zIndex: 100,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 6,
+  },
+  container: {
     display: "flex",
     alignItems: "center",
     gap: 12,
@@ -209,5 +258,24 @@ const styles: Record<string, React.CSSProperties> = {
   disabledButton: {
     opacity: 0.35,
     cursor: "default",
+  },
+  recentRow: {
+    display: "flex",
+    gap: 4,
+    background: "rgba(30,30,30,0.9)",
+    borderRadius: 8,
+    padding: "4px 8px",
+    boxShadow: "0 2px 12px rgba(0,0,0,0.5)",
+  },
+  swatch: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    border: "2px solid transparent",
+    cursor: "pointer",
+    padding: 0,
+  },
+  swatchActive: {
+    border: "2px solid #fff",
   },
 };
