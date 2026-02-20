@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { HexColorPicker } from "react-colorful";
+import { Wand2 } from "lucide-react";
 import type { Mode } from "../hooks/useDrawing";
 
 const MAX_RECENT = 12;
@@ -20,6 +21,9 @@ interface Props {
   canRedo: boolean;
   fillMode: boolean;
   onSetFillMode: (fill: boolean) => void;
+  autoSubmit: boolean;
+  onSetAutoSubmit: (v: boolean) => void;
+  unsubmittedPixelCount: number;
 }
 
 export default function Toolbar({
@@ -38,6 +42,9 @@ export default function Toolbar({
   canRedo,
   fillMode,
   onSetFillMode,
+  autoSubmit,
+  onSetAutoSubmit,
+  unsubmittedPixelCount,
 }: Props) {
   const [recentColors, setRecentColors] = useState<string[]>([]);
   const knownColors = useRef(new Set<string>());
@@ -174,20 +181,43 @@ export default function Toolbar({
             </button>
           </div>
 
-          {pendingPixels.length > 0 && (
-            <div style={styles.pendingSection}>
-              <span style={styles.pendingCount}>{pendingPixels.length}px</span>
-              <button
-                style={styles.submitButton}
-                onClick={onSubmit}
-                disabled={isSending}
-              >
-                {isSending ? "Sending..." : "Submit"}
-              </button>
-              <button style={styles.clearButton} onClick={onClear}>
-                Clear
-              </button>
-            </div>
+          <button
+            style={{
+              ...styles.clearButton,
+              ...(autoSubmit ? styles.modeActive : {}),
+            }}
+            onClick={() => onSetAutoSubmit(!autoSubmit)}
+            title="Auto-submit mode"
+          >
+            <Wand2 size={14} style={{ marginRight: 4, verticalAlign: -2 }} />
+            Auto
+          </button>
+
+          {autoSubmit ? (
+            unsubmittedPixelCount > 0 && (
+              <div style={styles.pendingSection}>
+                <span style={styles.pendingCount}>{unsubmittedPixelCount}px</span>
+                <button style={styles.clearButton} onClick={onClear}>
+                  Clear
+                </button>
+              </div>
+            )
+          ) : (
+            pendingPixels.length > 0 && (
+              <div style={styles.pendingSection}>
+                <span style={styles.pendingCount}>{pendingPixels.length}px</span>
+                <button
+                  style={styles.submitButton}
+                  onClick={onSubmit}
+                  disabled={isSending}
+                >
+                  {isSending ? "Sending..." : "Submit"}
+                </button>
+                <button style={styles.clearButton} onClick={onClear}>
+                  Clear
+                </button>
+              </div>
+            )
           )}
         </>
       )}

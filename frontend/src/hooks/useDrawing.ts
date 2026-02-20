@@ -94,24 +94,58 @@ export function useDrawing(
   regionDataRef: React.RefObject<Map<string, ArrayBuffer>>,
   openRegionsRef: React.RefObject<Set<string>>
 ) {
-  const [mode, setMode] = useState<Mode>("move");
-  const [color, setColor] = useState(() =>
-    accountId ? colorFromAccount(accountId) : "#FF5733"
-  );
+  const [mode, setModeRaw] = useState<Mode>(() => {
+    const saved = localStorage.getItem("draw_mode");
+    return saved === "draw" ? "draw" : "move";
+  });
+  const setMode = useCallback((m: Mode) => {
+    localStorage.setItem("draw_mode", m);
+    setModeRaw(m);
+  }, []);
+  const [color, setColorRaw] = useState(() => {
+    const saved = localStorage.getItem("draw_color");
+    if (saved) return saved;
+    return accountId ? colorFromAccount(accountId) : "#FF5733";
+  });
+  const setColor = useCallback((c: string) => {
+    localStorage.setItem("draw_color", c);
+    setColorRaw(c);
+  }, []);
   const hasSetAccountColor = useRef(false);
 
   useEffect(() => {
     if (accountId && !hasSetAccountColor.current) {
       hasSetAccountColor.current = true;
-      setColor(colorFromAccount(accountId));
+      if (!localStorage.getItem("draw_color")) {
+        setColor(colorFromAccount(accountId));
+      }
     }
-  }, [accountId]);
+  }, [accountId, setColor]);
   const [fillMode, setFillMode] = useState(false);
   const [fillError, setFillError] = useState<string | null>(null);
   const fillErrorTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [pendingPixels, setPendingPixels] = useState<Pixel[]>([]);
   const [isSending, setIsSending] = useState(false);
   const isDrawingRef = useRef(false);
+
+  // Auto-submit state and refs
+  const [autoSubmit, setAutoSubmitRaw] = useState(() => {
+    const saved = localStorage.getItem("auto_submit");
+    return saved !== null ? saved === "true" : true;
+  });
+  const setAutoSubmit = useCallback((v: boolean) => {
+    localStorage.setItem("auto_submit", String(v));
+    setAutoSubmitRaw(v);
+  }, []);
+  const autoSubmitRef = useRef(autoSubmit);
+  const autoSubmitTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const isSendingRef = useRef(false);
+  const needsResubmitRef = useRef(false);
+  const pendingPixelsRef = useRef<Pixel[]>([]);
+  const doSubmitRef = useRef<(() => Promise<void>) | undefined>(undefined);
+
+  // Keep autoSubmit ref in sync
+  useEffect(() => { autoSubmitRef.current = autoSubmit; }, [autoSubmit]);
 
   // Stroke stacks
   const strokesRef = useRef<Stroke[]>([]);
@@ -136,8 +170,50 @@ export function useDrawing(
     for (const p of drawn) {
       map.set(`${p.x},${p.y}`, p);
     }
-    setPendingPixels(Array.from(map.values()));
+    const pixels = Array.from(map.values());
+    pendingPixelsRef.current = pixels;
+    setPendingPixels(pixels);
   }, []);
+
+  const scheduleAutoSubmit = useCallback(() => {
+    if (!autoSubmitRef.current) return;
+    clearTimeout(autoSubmitTimerRef.current);
+    autoSubmitTimerRef.current = setTimeout(() => {
+      if (strokesRef.current.length === 0) return;
+      if (isSendingRef.current) {
+        needsResubmitRef.current = true;
+        return;
+      }
+      doSubmitRef.current?.();
+    }, 250);
+  }, []);
+
+  const doSubmit = useCallback(async () => {
+    const pixels = derivePixels(strokesRef.current, []);
+    if (pixels.length === 0 || isSendingRef.current) return;
+    const strokeCount = strokesRef.current.length;
+    isSendingRef.current = true;
+    setIsSending(true);
+    try {
+      await callDraw(pixels);
+      submittedPixelsRef.current = [...submittedPixelsRef.current, ...pixels];
+      strokesRef.current = strokesRef.current.slice(strokeCount);
+      redoStackRef.current = [];
+      recomputePending();
+    } catch (e) {
+      console.error("Failed to submit pixels:", e);
+    } finally {
+      isSendingRef.current = false;
+      setIsSending(false);
+      if (needsResubmitRef.current) {
+        needsResubmitRef.current = false;
+        if (strokesRef.current.length > 0) {
+          scheduleAutoSubmit();
+        }
+      }
+    }
+  }, [callDraw, recomputePending, scheduleAutoSubmit]);
+  doSubmitRef.current = doSubmit;
 
   const startDrawing = useCallback(() => {
     if (mode !== "draw" || !accountId) return;
@@ -152,8 +228,9 @@ export function useDrawing(
       redoStackRef.current = [];
       currentStrokeRef.current = [];
       recomputePending();
+      scheduleAutoSubmit();
     }
-  }, [recomputePending]);
+  }, [recomputePending, scheduleAutoSubmit]);
 
   /** Called from useBoard when a WebSocket draw event arrives. */
   const handleDrawEvent = useCallback(
@@ -293,9 +370,10 @@ export function useDrawing(
       strokesRef.current = [...strokesRef.current, filled];
       redoStackRef.current = [];
       recomputePending();
+      scheduleAutoSubmit();
       setFillMode(false);
     },
-    [mode, accountId, colorHex, regionDataRef, openRegionsRef, recomputePending]
+    [mode, accountId, colorHex, regionDataRef, openRegionsRef, recomputePending, scheduleAutoSubmit]
   );
 
   const undo = useCallback(() => {
@@ -316,32 +394,27 @@ export function useDrawing(
 
   const canUndo = strokesRef.current.length > 0;
   const canRedo = redoStackRef.current.length > 0;
+  const unsubmittedPixelCount = derivePixels(strokesRef.current, currentStrokeRef.current).length;
 
-  const submitPixels = useCallback(async () => {
-    if (pendingPixels.length === 0 || isSending) return;
-    setIsSending(true);
-    try {
-      await callDraw(pendingPixels);
-      // Move to submitted buffer — they stay visible until WS confirms
-      submittedPixelsRef.current = [...submittedPixelsRef.current, ...pendingPixels];
-      strokesRef.current = [];
-      redoStackRef.current = [];
-      currentStrokeRef.current = [];
-      recomputePending();
-    } catch (e) {
-      console.error("Failed to submit pixels:", e);
-    } finally {
-      setIsSending(false);
-    }
-  }, [pendingPixels, isSending, callDraw]);
+  const submitPixels = doSubmit;
 
   const clearPending = useCallback(() => {
+    clearTimeout(autoSubmitTimerRef.current);
+    needsResubmitRef.current = false;
     strokesRef.current = [];
     redoStackRef.current = [];
     currentStrokeRef.current = [];
     submittedPixelsRef.current = [];
+    pendingPixelsRef.current = [];
     setPendingPixels([]);
   }, []);
+
+  // When autoSubmit is toggled on, schedule if there are pending strokes
+  useEffect(() => {
+    if (autoSubmit && strokesRef.current.length > 0) {
+      scheduleAutoSubmit();
+    }
+  }, [autoSubmit, scheduleAutoSubmit]);
 
   // Keyboard shortcuts for undo/redo (only in draw mode)
   useEffect(() => {
@@ -388,5 +461,8 @@ export function useDrawing(
     redo,
     canUndo,
     canRedo,
+    autoSubmit,
+    setAutoSubmit,
+    unsubmittedPixelCount,
   };
 }

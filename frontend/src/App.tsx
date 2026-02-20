@@ -45,6 +45,9 @@ export default function App() {
     redo,
     canUndo,
     canRedo,
+    autoSubmit,
+    setAutoSubmit,
+    unsubmittedPixelCount,
   } = useDrawing(callDraw, accountId, regionDataRef, openRegionsRef);
 
   // Wire the callback ref to the actual handler
@@ -108,6 +111,9 @@ export default function App() {
         canRedo={canRedo}
         fillMode={fillMode}
         onSetFillMode={setFillMode}
+        autoSubmit={autoSubmit}
+        onSetAutoSubmit={setAutoSubmit}
+        unsubmittedPixelCount={unsubmittedPixelCount}
       />
 
       <Minimap
