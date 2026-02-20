@@ -23,6 +23,7 @@ export function useBoard(
   const fetchingRef = useRef<Set<string>>(new Set());
   const wsRef = useRef<WebSocketClient | null>(null);
   const openRegionsRef = useRef<Set<string>>(new Set(["0:0"]));
+  const [openRegionsVersion, setOpenRegionsVersion] = useState(0);
 
   // Connect WebSocket + fetch open regions
   useEffect(() => {
@@ -39,6 +40,7 @@ export function useBoard(
       for (const r of event.regions) {
         openRegionsRef.current.add(`${r.rx}:${r.ry}`);
       }
+      setOpenRegionsVersion((v) => v + 1);
     });
 
     // Fetch initial open regions from server
@@ -46,6 +48,7 @@ export function useBoard(
       for (const r of regions) {
         openRegionsRef.current.add(`${r.rx}:${r.ry}`);
       }
+      setOpenRegionsVersion((v) => v + 1);
     }).catch((e) => console.error("Failed to fetch open regions:", e));
 
     return () => ws.disconnect();
@@ -118,65 +121,111 @@ export function useBoard(
 
     const visible = getVisibleRegions(camera, canvasWidth, canvasHeight);
 
-    // Check which regions need fetching
-    const toFetch: Array<{ rx: number; ry: number; key: string }> = [];
+    // Check which regions need loading
+    const toLoad: Array<{ rx: number; ry: number; key: string }> = [];
 
     for (const { rx, ry } of visible) {
       const key = `${rx}:${ry}`;
       if (!openRegionsRef.current.has(key)) continue;
       if (regionDataRef.current.has(key) || fetchingRef.current.has(key)) continue;
-      toFetch.push({ rx, ry, key });
+      toLoad.push({ rx, ry, key });
     }
 
-    if (toFetch.length === 0) return;
+    if (toLoad.length === 0) return;
 
     // Mark as fetching
-    for (const { key } of toFetch) {
+    for (const { key } of toLoad) {
       fetchingRef.current.add(key);
     }
 
-    // Fetch regions
     (async () => {
-      for (const { rx, ry, key } of toFetch) {
+      // Phase 1: Load from IndexedDB cache and render immediately
+      const cachedKeys = new Set<string>();
+
+      await Promise.all(toLoad.map(async ({ rx, ry, key }) => {
         try {
-          // Try cache first
           const cached = await getCachedRegion(rx, ry);
           if (cached) {
             regionDataRef.current.set(key, cached.data);
             regionMetaRef.current.set(key, cached.lastUpdated);
+            cachedKeys.add(key);
           }
+        } catch (e) {
+          // Cache miss, will fetch from server
+        }
+      }));
 
-          // Always fetch fresh from server (will be a no-op if server has no updates)
+      if (cachedKeys.size > 0) {
+        await rebuildImages(cachedKeys);
+      }
+
+      // Phase 2: Batch-check server timestamps
+      const coords = toLoad.map(({ rx, ry }) => [rx, ry] as [number, number]);
+      let serverMetas: Array<{ rx: number; ry: number; last_updated: number }> = [];
+      try {
+        serverMetas = await fetchRegionsBatch(coords);
+      } catch (e) {
+        console.error("Failed to fetch region metadata batch:", e);
+        for (const { key } of toLoad) {
+          fetchingRef.current.delete(key);
+        }
+        return;
+      }
+
+      // Phase 3: Only fetch regions where server is newer than cache
+      const serverMetaMap = new Map(
+        serverMetas.map((m) => [`${m.rx}:${m.ry}`, m.last_updated])
+      );
+      const toFetchFull: Array<{ rx: number; ry: number; key: string }> = [];
+
+      for (const { rx, ry, key } of toLoad) {
+        const serverTs = serverMetaMap.get(key) ?? 0;
+        const cachedTs = regionMetaRef.current.get(key) ?? 0;
+        if (!cachedKeys.has(key) || serverTs > cachedTs) {
+          toFetchFull.push({ rx, ry, key });
+        }
+      }
+
+      // Phase 4: Fetch full data for stale/uncached regions
+      const updatedKeys = new Set<string>();
+      await Promise.all(toFetchFull.map(async ({ rx, ry, key }) => {
+        try {
           const { data, lastUpdated } = await fetchRegion(rx, ry);
           regionDataRef.current.set(key, data);
           regionMetaRef.current.set(key, lastUpdated);
           await setCachedRegion(rx, ry, data, lastUpdated);
-
-          // Fetch fresh pixel timestamps for drawable checks
-          if (pixelTimestampsRef?.current) {
-            try {
-              const timestamps = await fetchRegionTimestamps(rx, ry);
-              for (const [lx, ly, tsMs] of timestamps) {
-                const wx = rx * REGION_SIZE + lx;
-                const wy = ry * REGION_SIZE + ly;
-                pixelTimestampsRef.current.set(`${wx},${wy}`, tsMs);
-              }
-            } catch (e) {
-              console.error(`Failed to fetch timestamps for ${key}:`, e);
-            }
-          }
+          updatedKeys.add(key);
         } catch (e) {
           console.error(`Failed to fetch region ${key}:`, e);
-        } finally {
-          fetchingRef.current.delete(key);
         }
+      }));
+
+      if (updatedKeys.size > 0) {
+        await rebuildImages(updatedKeys);
       }
 
-      // Build ImageBitmaps for newly fetched regions
-      const newKeys = new Set(toFetch.map((r) => r.key));
-      await rebuildImages(newKeys);
+      // Fetch fresh pixel timestamps for all loaded regions
+      if (pixelTimestampsRef?.current) {
+        await Promise.all(toLoad.map(async ({ rx, ry, key }) => {
+          try {
+            const timestamps = await fetchRegionTimestamps(rx, ry);
+            for (const [lx, ly, tsMs] of timestamps) {
+              const wx = rx * REGION_SIZE + lx;
+              const wy = ry * REGION_SIZE + ly;
+              pixelTimestampsRef.current!.set(`${wx},${wy}`, tsMs);
+            }
+          } catch (e) {
+            console.error(`Failed to fetch timestamps for ${key}:`, e);
+          }
+        }));
+      }
+
+      // Clean up fetching state
+      for (const { key } of toLoad) {
+        fetchingRef.current.delete(key);
+      }
     })();
-  }, [camera, canvasWidth, canvasHeight, rebuildImages]);
+  }, [camera, canvasWidth, canvasHeight, openRegionsVersion, rebuildImages]);
 
   return { regionImages, regionDataRef, openRegionsRef };
 }
