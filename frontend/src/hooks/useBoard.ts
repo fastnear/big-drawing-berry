@@ -100,10 +100,11 @@ export function useBoard(
       view[offset + 1] = g;
       view[offset + 2] = b;
 
-      // Set a non-zero owner_id so the pixel renders as drawn
-      if (view[offset + 3] === 0 && view[offset + 4] === 0 && view[offset + 5] === 0) {
-        view[offset + 3] = 1; // minimal non-zero marker
-      }
+      // Write owner_id as u24 LE
+      const oid = pixel.owner_id ?? 1;
+      view[offset + 3] = oid & 0xFF;
+      view[offset + 4] = (oid >> 8) & 0xFF;
+      view[offset + 5] = (oid >> 16) & 0xFF;
 
       affectedRegions.add(key);
     }

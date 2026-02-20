@@ -8,6 +8,7 @@ export interface DrawPixel {
   x: number;
   y: number;
   color: string; // hex "FF5733"
+  owner_id: number;
 }
 
 export interface DrawEventWS {

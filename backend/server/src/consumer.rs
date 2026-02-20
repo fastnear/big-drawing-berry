@@ -72,7 +72,8 @@ pub async fn run(
                     serde_json::json!({
                         "x": p.x,
                         "y": p.y,
-                        "color": format!("{:02X}{:02X}{:02X}", p.r, p.g, p.b)
+                        "color": format!("{:02X}{:02X}{:02X}", p.r, p.g, p.b),
+                        "owner_id": p.owner_id
                     })
                 }).collect::<Vec<_>>()
             });

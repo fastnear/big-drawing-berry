@@ -144,6 +144,7 @@ impl Board {
                     r,
                     g,
                     b,
+                    owner_id,
                 });
             }
 
@@ -280,4 +281,5 @@ pub struct AppliedPixel {
     pub r: u8,
     pub g: u8,
     pub b: u8,
+    pub owner_id: u32,
 }
