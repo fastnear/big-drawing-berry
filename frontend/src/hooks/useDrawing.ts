@@ -92,7 +92,8 @@ export function useDrawing(
   callDraw: (pixels: Array<{ x: number; y: number; color: string }>) => Promise<void>,
   accountId: string | null,
   regionDataRef: React.RefObject<Map<string, ArrayBuffer>>,
-  openRegionsRef: React.RefObject<Set<string>>
+  openRegionsRef: React.RefObject<Set<string>>,
+  pixelTimestampsRef: React.RefObject<Map<string, number>>
 ) {
   const [mode, setModeRaw] = useState<Mode>(() => {
     const saved = localStorage.getItem("draw_mode");
@@ -155,8 +156,7 @@ export function useDrawing(
   // Pixels submitted to chain but not yet confirmed by WebSocket
   const submittedPixelsRef = useRef<Pixel[]>([]);
 
-  // Track timestamps for all pixels seen via WS (client-side hint to avoid wasted transactions)
-  const pixelTimestamps = useRef<Map<string, number>>(new Map());
+  // pixelTimestampsRef is shared with useBoard (populated on region fetch + WS events)
 
   const colorHex = color.replace("#", "").toUpperCase();
 
@@ -281,10 +281,10 @@ export function useDrawing(
   /** Called from useBoard when a WebSocket draw event arrives. */
   const handleDrawEvent = useCallback(
     (event: DrawEventWS) => {
-      const now = Date.now();
-      // Track timestamps for ALL pixels (any signer)
+      // Track timestamps for ALL pixels (any signer) — use block_timestamp_ms to match server scores
+      const ts = event.block_timestamp_ms;
       for (const pixel of event.pixels) {
-        pixelTimestamps.current.set(`${pixel.x},${pixel.y}`, now);
+        pixelTimestampsRef.current.set(`${pixel.x},${pixel.y}`, ts);
       }
       // Only clear submitted buffer for our own events
       if (accountId && event.signer === accountId && submittedPixelsRef.current.length > 0) {
@@ -323,15 +323,16 @@ export function useDrawing(
 
         if (hasOwner) {
           const coordKey = `${px},${py}`;
-          const ts = pixelTimestamps.current.get(coordKey);
-          if (ts) {
-            const ageMs = Date.now() - ts;
-            if (ageMs >= OWNERSHIP_DURATION_MS) {
-              // Pixel is permanent — skip
-              return;
-            }
+          const ts = pixelTimestampsRef.current.get(coordKey);
+          if (!ts) {
+            // No WS data — treat as permanent (can't verify freshness)
+            return;
           }
-          // Allow — either we know it's recent, or we don't know (optimistic)
+          if (Date.now() - ts >= OWNERSHIP_DURATION_MS) {
+            // Pixel is permanent — skip
+            return;
+          }
+          // Fresh pixel — anyone can draw
         }
       }
 
@@ -486,6 +487,32 @@ export function useDrawing(
     return () => window.removeEventListener("keydown", handler);
   }, [mode, undo, redo]);
 
+  /** Check if a pixel at world coordinates is drawable by the current user. */
+  const canDrawAt = useCallback(
+    (worldX: number, worldY: number): boolean => {
+      if (!accountId) return false;
+      const px = Math.floor(worldX);
+      const py = Math.floor(worldY);
+      const rx = Math.floor(px / REGION_SIZE);
+      const ry = Math.floor(py / REGION_SIZE);
+      const rkey = `${rx}:${ry}`;
+      if (openRegionsRef.current && !openRegionsRef.current.has(rkey)) return false;
+      const blob = regionDataRef.current?.get(rkey);
+      if (!blob) return true; // region not loaded, be optimistic
+      const lx = ((px % REGION_SIZE) + REGION_SIZE) % REGION_SIZE;
+      const ly = ((py % REGION_SIZE) + REGION_SIZE) % REGION_SIZE;
+      const offset = (ly * REGION_SIZE + lx) * PIXEL_SIZE;
+      const view = new Uint8Array(blob);
+      const hasOwner =
+        view[offset + 3] !== 0 || view[offset + 4] !== 0 || view[offset + 5] !== 0;
+      if (!hasOwner) return true;
+      const ts = pixelTimestampsRef.current.get(`${px},${py}`);
+      if (!ts) return false;
+      return Date.now() - ts < OWNERSHIP_DURATION_MS;
+    },
+    [accountId, regionDataRef, openRegionsRef]
+  );
+
   return {
     mode,
     setMode,
@@ -510,5 +537,6 @@ export function useDrawing(
     autoSubmit,
     setAutoSubmit,
     unsubmittedPixelCount,
+    canDrawAt,
   };
 }

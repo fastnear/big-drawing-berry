@@ -27,6 +27,7 @@ interface Props {
   fillMode: boolean;
   onFillAtPoint: (worldX: number, worldY: number) => void;
   onCursorMove?: (worldX: number, worldY: number) => void;
+  drawBlocked?: boolean;
 }
 
 export default function Board({
@@ -46,6 +47,7 @@ export default function Board({
   fillMode,
   onFillAtPoint,
   onCursorMove,
+  drawBlocked,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isPanningRef = useRef(false);
@@ -323,7 +325,7 @@ export default function Board({
         position: "absolute",
         top: 0,
         left: 0,
-        cursor: altHeld ? "copy" : mode === "move" ? "grab" : fillMode ? "cell" : "crosshair",
+        cursor: altHeld ? "copy" : mode === "move" ? "grab" : fillMode ? "cell" : drawBlocked ? "not-allowed" : "crosshair",
         touchAction: "none",
       }}
       onMouseDown={handleMouseDown}

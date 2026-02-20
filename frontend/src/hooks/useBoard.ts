@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import type { Camera, DrawEventWS } from "../lib/types";
 import { REGION_SIZE, PIXEL_SIZE } from "../lib/constants";
-import { fetchRegion, fetchRegionsBatch, fetchOpenRegions } from "../lib/api";
+import { fetchRegion, fetchRegionsBatch, fetchOpenRegions, fetchRegionTimestamps } from "../lib/api";
 import { getCachedRegion, setCachedRegion } from "../lib/region-cache";
 import { decodeRegionToImageData, getVisibleRegions } from "../lib/canvas-renderer";
 import { WebSocketClient } from "../lib/ws";
@@ -14,7 +14,8 @@ export function useBoard(
   camera: Camera,
   canvasWidth: number,
   canvasHeight: number,
-  onDrawEvent?: (event: DrawEventWS) => void
+  onDrawEvent?: (event: DrawEventWS) => void,
+  pixelTimestampsRef?: React.RefObject<Map<string, number>>
 ) {
   const [regionImages, setRegionImages] = useState<Map<string, ImageBitmap>>(new Map());
   const regionDataRef = useRef<Map<string, ArrayBuffer>>(new Map());
@@ -150,6 +151,20 @@ export function useBoard(
           regionDataRef.current.set(key, data);
           regionMetaRef.current.set(key, lastUpdated);
           await setCachedRegion(rx, ry, data, lastUpdated);
+
+          // Fetch fresh pixel timestamps for drawable checks
+          if (pixelTimestampsRef?.current) {
+            try {
+              const timestamps = await fetchRegionTimestamps(rx, ry);
+              for (const [lx, ly, tsMs] of timestamps) {
+                const wx = rx * REGION_SIZE + lx;
+                const wy = ry * REGION_SIZE + ly;
+                pixelTimestampsRef.current.set(`${wx},${wy}`, tsMs);
+              }
+            } catch (e) {
+              console.error(`Failed to fetch timestamps for ${key}:`, e);
+            }
+          }
         } catch (e) {
           console.error(`Failed to fetch region ${key}:`, e);
         } finally {

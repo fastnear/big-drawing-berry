@@ -25,6 +25,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/regions", get(get_regions_batch))
         .route("/api/stats/accounts", get(get_account_stats))
         .route("/api/stats/region/{rx}/{ry}", get(get_region_stats))
+        .route("/api/region/{rx}/{ry}/timestamps", get(get_region_timestamps))
         .route("/api/account/{owner_id}", get(get_account_by_id))
         .route("/api/open-regions", get(get_open_regions))
         .route("/api/health", get(health))
@@ -213,6 +214,41 @@ async fn get_open_regions(State(state): State<AppState>) -> impl IntoResponse {
         .collect();
 
     axum::Json(regions)
+}
+
+async fn get_region_timestamps(
+    State(state): State<AppState>,
+    Path((rx, ry)): Path<(i32, i32)>,
+) -> impl IntoResponse {
+    let key = common::valkey::pixel_ts_key(rx, ry);
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as f64;
+    let one_hour_ago_ms = now_ms - 3_600_000.0;
+
+    // Fetch only fresh entries (< 1 hour old); scores are in milliseconds
+    let entries: Vec<(String, f64)> = redis::cmd("ZRANGEBYSCORE")
+        .arg(&key)
+        .arg(one_hour_ago_ms)
+        .arg("+inf")
+        .arg("WITHSCORES")
+        .query_async(&mut state.valkey.clone())
+        .await
+        .unwrap_or_default();
+
+    // Convert to [[lx, ly, ts_ms], ...] for compact transfer
+    let results: Vec<[u64; 3]> = entries
+        .into_iter()
+        .filter_map(|(member, score)| {
+            let (lx_str, ly_str) = member.split_once(',')?;
+            let lx: u64 = lx_str.parse().ok()?;
+            let ly: u64 = ly_str.parse().ok()?;
+            Some([lx, ly, score as u64])
+        })
+        .collect();
+
+    axum::Json(results)
 }
 
 async fn get_account_by_id(

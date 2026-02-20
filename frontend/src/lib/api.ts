@@ -28,3 +28,12 @@ export async function fetchOpenRegions(): Promise<RegionCoord[]> {
   const res = await fetch(`${API_BASE}/api/open-regions`);
   return res.json();
 }
+
+/** Fetch fresh pixel timestamps (< 1hr old) for a region. Returns [[lx, ly, ts_ms], ...] */
+export async function fetchRegionTimestamps(
+  rx: number,
+  ry: number
+): Promise<Array<[number, number, number]>> {
+  const res = await fetch(`${API_BASE}/api/region/${rx}/${ry}/timestamps`);
+  return res.json();
+}

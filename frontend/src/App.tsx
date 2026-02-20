@@ -18,6 +18,7 @@ export default function App() {
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const [cursorCoords, setCursorCoords] = useState<{ x: number; y: number } | null>(null);
   const [hoveredAccount, setHoveredAccount] = useState<string | null>(null);
+  const [drawBlocked, setDrawBlocked] = useState(false);
 
   // Use a ref-based callback so useBoard can call handleDrawEvent without circular deps
   const drawEventCallbackRef = useRef<((event: DrawEventWS) => void) | null>(null);
@@ -25,7 +26,8 @@ export default function App() {
     drawEventCallbackRef.current?.(event);
   }, []);
 
-  const { regionImages, regionDataRef, openRegionsRef } = useBoard(camera, canvasSize.w, canvasSize.h, onDrawEvent);
+  const pixelTimestampsRef = useRef<Map<string, number>>(new Map());
+  const { regionImages, regionDataRef, openRegionsRef } = useBoard(camera, canvasSize.w, canvasSize.h, onDrawEvent, pixelTimestampsRef);
 
   const {
     mode,
@@ -51,7 +53,8 @@ export default function App() {
     autoSubmit,
     setAutoSubmit,
     unsubmittedPixelCount,
-  } = useDrawing(callDraw, accountId, regionDataRef, openRegionsRef);
+    canDrawAt,
+  } = useDrawing(callDraw, accountId, regionDataRef, openRegionsRef, pixelTimestampsRef);
 
   // Wire the callback ref to the actual handler
   useEffect(() => {
@@ -64,7 +67,8 @@ export default function App() {
 
   const handleCursorMove = useCallback((worldX: number, worldY: number) => {
     setCursorCoords({ x: Math.floor(worldX), y: Math.floor(worldY) });
-  }, []);
+    setDrawBlocked(!canDrawAt(worldX, worldY));
+  }, [canDrawAt]);
 
   const handleMinimapNavigate = useCallback((worldX: number, worldY: number) => {
     setCamera((c) => ({ ...c, x: worldX, y: worldY }));
@@ -126,6 +130,7 @@ export default function App() {
         fillMode={fillMode}
         onFillAtPoint={fillAtPoint}
         onCursorMove={handleCursorMove}
+        drawBlocked={drawBlocked}
       />
 
       <WalletButton
