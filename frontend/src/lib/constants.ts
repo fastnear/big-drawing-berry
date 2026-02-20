@@ -8,8 +8,5 @@ export const MAX_ZOOM = 40;
 export const DEFAULT_ZOOM = 20;
 export const GRID_ZOOM_THRESHOLD = 16; // Show grid lines at this zoom level and above
 
-export const API_BASE = "http://localhost:3000";
-export const WS_URL =
-  typeof window !== "undefined"
-    ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`
-    : "ws://localhost:3000/ws";
+export const API_BASE = "https://api.berry.fastnear.com";
+export const WS_URL = "https://api.berry.fastnear.com/ws";

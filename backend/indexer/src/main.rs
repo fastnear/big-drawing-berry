@@ -23,9 +23,13 @@ async fn main() -> anyhow::Result<()> {
     let client = redis::Client::open(valkey_url)?;
     let mut con = client.get_multiplexed_async_connection().await?;
 
-    // Read last processed block height
+    // Read last processed block height, falling back to START_BLOCK_HEIGHT env var
     let start_block: Option<u64> = con.get(common::valkey::LAST_PROCESSED_BLOCK).await?;
-    let start_block = start_block.map(|h| h + 1);
+    let start_block = start_block.map(|h| h + 1).or_else(|| {
+        std::env::var("START_BLOCK_HEIGHT")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+    });
 
     tracing::info!(
         "Starting indexer from block {:?} for contract {}",
