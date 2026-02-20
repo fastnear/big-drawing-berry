@@ -8,6 +8,8 @@ import WalletButton from "./components/WalletButton";
 import Toolbar from "./components/Toolbar";
 import Minimap from "./components/Minimap";
 import ZoomControls from "./components/ZoomControls";
+import { REGION_SIZE, PIXEL_SIZE } from "./lib/constants";
+import { resolveOwnerSync, resolveOwner } from "./lib/owner-cache";
 import type { DrawEventWS } from "./lib/types";
 
 export default function App() {
@@ -15,6 +17,7 @@ export default function App() {
   const { accountId, loading, signIn, signOut, callDraw } = useWallet();
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const [cursorCoords, setCursorCoords] = useState<{ x: number; y: number } | null>(null);
+  const [hoveredAccount, setHoveredAccount] = useState<string | null>(null);
 
   // Use a ref-based callback so useBoard can call handleDrawEvent without circular deps
   const drawEventCallbackRef = useRef<((event: DrawEventWS) => void) | null>(null);
@@ -66,6 +69,43 @@ export default function App() {
   const handleMinimapNavigate = useCallback((worldX: number, worldY: number) => {
     setCamera((c) => ({ ...c, x: worldX, y: worldY }));
   }, [setCamera]);
+
+  // Resolve hovered pixel's owner_id to account name
+  useEffect(() => {
+    if (!cursorCoords) {
+      setHoveredAccount(null);
+      return;
+    }
+    const { x, y } = cursorCoords;
+    const rx = Math.floor(x / REGION_SIZE);
+    const ry = Math.floor(y / REGION_SIZE);
+    const blob = regionDataRef.current?.get(`${rx}:${ry}`);
+    if (!blob) {
+      setHoveredAccount(null);
+      return;
+    }
+    const lx = ((x % REGION_SIZE) + REGION_SIZE) % REGION_SIZE;
+    const ly = ((y % REGION_SIZE) + REGION_SIZE) % REGION_SIZE;
+    const offset = (ly * REGION_SIZE + lx) * PIXEL_SIZE;
+    const view = new Uint8Array(blob);
+    const ownerId = view[offset + 3] | (view[offset + 4] << 8) | (view[offset + 5] << 16);
+    if (ownerId === 0) {
+      setHoveredAccount(null);
+      return;
+    }
+    // Try sync cache first
+    const cached = resolveOwnerSync(ownerId);
+    if (cached !== undefined) {
+      setHoveredAccount(cached);
+      return;
+    }
+    // Async fetch
+    let cancelled = false;
+    resolveOwner(ownerId).then((account) => {
+      if (!cancelled) setHoveredAccount(account);
+    });
+    return () => { cancelled = true; };
+  }, [cursorCoords, regionDataRef]);
 
   return (
     <>
@@ -147,6 +187,9 @@ export default function App() {
           }}
         >
           {cursorCoords.x}, {cursorCoords.y}
+          {hoveredAccount && (
+            <div style={{ color: "#aaa", fontSize: 11 }}>{hoveredAccount}</div>
+          )}
         </div>
       )}
 

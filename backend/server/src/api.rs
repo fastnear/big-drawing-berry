@@ -25,6 +25,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/regions", get(get_regions_batch))
         .route("/api/stats/accounts", get(get_account_stats))
         .route("/api/stats/region/{rx}/{ry}", get(get_region_stats))
+        .route("/api/account/{owner_id}", get(get_account_by_id))
         .route("/api/open-regions", get(get_open_regions))
         .route("/api/health", get(health))
         .route("/ws", get(ws_upgrade))
@@ -212,6 +213,29 @@ async fn get_open_regions(State(state): State<AppState>) -> impl IntoResponse {
         .collect();
 
     axum::Json(regions)
+}
+
+async fn get_account_by_id(
+    State(state): State<AppState>,
+    Path(owner_id): Path<u32>,
+) -> impl IntoResponse {
+    let account: Option<String> = state
+        .valkey
+        .clone()
+        .hget(common::valkey::ID_TO_ACCOUNT, owner_id)
+        .await
+        .unwrap_or(None);
+
+    match account {
+        Some(id) => (
+            [
+                (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+            ],
+            id,
+        )
+            .into_response(),
+        None => axum::http::StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 async fn ws_upgrade(

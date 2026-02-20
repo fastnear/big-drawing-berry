@@ -46,8 +46,13 @@ export default function Toolbar({
   onSetAutoSubmit,
   unsubmittedPixelCount,
 }: Props) {
-  const [recentColors, setRecentColors] = useState<string[]>([]);
-  const knownColors = useRef(new Set<string>());
+  const [recentColors, setRecentColors] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("recent_colors");
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+  const knownColors = useRef(new Set<string>(recentColors));
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
 
@@ -78,7 +83,9 @@ export default function Toolbar({
     if (newColors.length > 0) {
       setRecentColors((prev) => {
         const filtered = prev.filter((c) => !newColors.includes(c));
-        return [...newColors, ...filtered].slice(0, MAX_RECENT);
+        const next = [...newColors, ...filtered].slice(0, MAX_RECENT);
+        localStorage.setItem("recent_colors", JSON.stringify(next));
+        return next;
       });
     }
   }, [pendingPixels]);
