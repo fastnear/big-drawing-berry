@@ -1,4 +1,4 @@
-export const CONTRACT_ID = "testberryfast.near";
+export const CONTRACT_ID = "berryfast.near";
 export const REGION_SIZE = 128;
 export const PIXEL_SIZE = 6; // 3 (RGB) + 3 (owner_id u24)
 export const REGION_BLOB_SIZE = REGION_SIZE * REGION_SIZE * PIXEL_SIZE;
