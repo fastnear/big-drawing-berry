@@ -2,6 +2,8 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { MIN_ZOOM, MAX_ZOOM, DEFAULT_ZOOM } from "../lib/constants";
 import type { Camera } from "../lib/types";
 
+const CAMERA_STORAGE_KEY = "camera";
+
 function parseHash(): Camera {
   const hash = window.location.hash.slice(1);
   const parts = hash.split(",");
@@ -13,12 +15,24 @@ function parseHash(): Camera {
       return { x, y, zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom)) };
     }
   }
+  try {
+    const saved = localStorage.getItem(CAMERA_STORAGE_KEY);
+    if (saved) {
+      const { x, y, zoom } = JSON.parse(saved);
+      if (typeof x === "number" && typeof y === "number" && typeof zoom === "number") {
+        return { x, y, zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom)) };
+      }
+    }
+  } catch {}
   return { x: 64, y: 64, zoom: DEFAULT_ZOOM };
 }
 
 function updateHash(camera: Camera) {
   const hash = `${Math.round(camera.x)},${Math.round(camera.y)},${camera.zoom.toFixed(1)}`;
   window.history.replaceState(null, "", `#${hash}`);
+  try {
+    localStorage.setItem(CAMERA_STORAGE_KEY, JSON.stringify({ x: camera.x, y: camera.y, zoom: camera.zoom }));
+  } catch {}
 }
 
 export function useCamera() {
